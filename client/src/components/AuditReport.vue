@@ -2,6 +2,7 @@
 import { computed, ref, watch, nextTick } from "vue";
 import type { AuditLog, AuditStep, AuditStepStatus, AuditSummary } from "../types";
 import { marked } from "marked";
+import { apiUrl } from "../api";
 
 const props = defineProps<{
   phase: "idle" | "running" | "done" | "error";
@@ -122,7 +123,7 @@ async function openReport() {
   loadingContent.value = true;
   reportContent.value = "";
   try {
-    const res = await fetch(`/api/report/${encodeURIComponent(props.reportFile)}`);
+    const res = await fetch(apiUrl(`/api/report/${encodeURIComponent(props.reportFile)}`));
     if (!res.ok) {
       reportContent.value = `**加载失败**：服务器返回 ${res.status}`;
       return;
@@ -143,7 +144,7 @@ function closeModal() {
 function downloadReport() {
   if (!props.reportFile) return;
   const a = document.createElement("a");
-  a.href = `/api/report/${encodeURIComponent(props.reportFile)}`;
+  a.href = apiUrl(`/api/report/${encodeURIComponent(props.reportFile)}`);
   a.download = props.reportFile;
   document.body.appendChild(a);
   a.click();

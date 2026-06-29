@@ -6,6 +6,7 @@ import type {
   AuditStep,
   AuditSummary,
 } from "../types";
+import { apiUrl } from "../api";
 
 export type AuditPhase = "idle" | "running" | "done" | "error";
 
@@ -100,7 +101,7 @@ export function useAudit() {
     reset();
     let res: Response;
     try {
-      res = await fetch("/api/audit", {
+      res = await fetch(apiUrl("/api/audit"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(req),
