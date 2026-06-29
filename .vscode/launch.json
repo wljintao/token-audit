@@ -1,0 +1,55 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Backend (tsx)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/server",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/tsx",
+      "runtimeArgs": ["src/index.ts"],
+      "env": { "PORT": "3000" },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
+    },
+    {
+      "name": "Debug Prod Server (built)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/server",
+      "runtimeExecutable": "node",
+      "args": ["dist/index.js"],
+      "env": { "PORT": "3000" },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Launch Frontend (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/client/src",
+      "sourceMaps": true,
+      "preLaunchTask": "Start Vite (client)"
+    },
+    {
+      "name": "Launch Frontend (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/client/src",
+      "sourceMaps": true,
+      "preLaunchTask": "Start Vite (client)"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack (Backend + Chrome)",
+      "configurations": ["Debug Backend (tsx)", "Launch Frontend (Chrome)"]
+    },
+    {
+      "name": "Full Stack (Backend + Edge)",
+      "configurations": ["Debug Backend (tsx)", "Launch Frontend (Edge)"]
+    }
+  ]
+}

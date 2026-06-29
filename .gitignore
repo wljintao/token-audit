@@ -1,0 +1,36 @@
+# ── Node.js ─────────────────────────────────────────────
+node_modules/
+# 构建产物：server/dist、client/dist 均由 build 生成
+dist/
+*.log
+
+# ── Python（audit_py/）─────────────────────────────────
+# 虚拟环境（venv 内含机器相关绝对路径，不入库）
+.venv/
+venv/
+# 字节码缓存
+__pycache__/
+*.py[cod]
+# 类型检查/打包缓存
+.mypy_cache/
+.pytest_cache/
+*.egg-info/
+
+# ── 审计报告（运行产物，每次审计生成）─────────────────
+reports/
+
+# ── 环境与机密 ─────────────────────────────────────────
+.env
+.env.*
+# 本地配置覆盖（config.json 入库作默认，config.local.json 不入库）
+config.local.json
+
+# ── 编辑器/系统杂项 ───────────────────────────────────
+.DS_Store
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+.idea/
+
+# ── Claude 本地工作目录 ───────────────────────────────
+.claude/

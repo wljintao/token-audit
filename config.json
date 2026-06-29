@@ -1,0 +1,6 @@
+{
+  "_comment": "Token Audit 服务端配置。优先级：环境变量 > 本文件 > 代码内置默认。本文件入库作默认值；机密或环境相关的值改用环境变量或 config.local.json（已 gitignore）。",
+  "port": 3000,
+  "auditPython": "",
+  "auditTimeoutMs": 600000
+}

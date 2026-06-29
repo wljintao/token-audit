@@ -1,0 +1,4 @@
+# Token Audit — Python 审计依赖
+#
+# 当前仅使用 Python 标准库 (urllib / json / sys / time)，无第三方依赖。
+# 如未来引入依赖（如 httpx），在此列出并重新运行 `npm run python:setup`。
