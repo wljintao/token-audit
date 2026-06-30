@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>" />
@@ -7,7 +7,74 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" />
-    <title>Token Audit</title>
+
+    <!-- SEO: Primary -->
+    <title>Token Audit — OpenAI 中转站深度审计工具</title>
+    <meta name="description" content="一键检测任意 OpenAI 兼容中转站的可达性、鉴权与模型真实性。流式执行，逐项落库，产出可追溯的安全与可用性审计报告。" />
+    <meta name="keywords" content="Token Audit, OpenAI 中转站审计, API 中转站检测, GPT 模型真实性, 流式审计, API Key 安全, 中转站鉴权, 模型 spoofing 检测, OpenAI relay audit, API security" />
+    <meta name="author" content="Token Audit" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://audit.anyllm.cc/" />
+
+    <!-- SEO: Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Token Audit — OpenAI 中转站深度审计工具" />
+    <meta property="og:description" content="一键检测任意 OpenAI 兼容中转站的可达性、鉴权与模型真实性。流式执行，逐项落库，产出可追溯的安全与可用性审计报告。" />
+    <meta property="og:url" content="https://audit.anyllm.cc/" />
+    <meta property="og:site_name" content="Token Audit" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:image" content="https://audit.anyllm.cc/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Token Audit — OpenAI 中转站深度审计工具" />
+
+    <!-- SEO: Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Token Audit — OpenAI 中转站深度审计工具" />
+    <meta name="twitter:description" content="一键检测任意 OpenAI 兼容中转站的可达性、鉴权与模型真实性。流式执行，产出可追溯的安全与可用性审计报告。" />
+    <meta name="twitter:image" content="https://audit.anyllm.cc/og-image.png" />
+
+    <!-- SEO: Theme -->
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="apple-mobile-web-app-title" content="Token Audit" />
+    <meta name="application-name" content="Token Audit" />
+
+    <!-- SEO: Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Token Audit",
+      "url": "https://audit.anyllm.cc/",
+      "description": "一键检测任意 OpenAI 兼容中转站的可达性、鉴权与模型真实性。流式执行，逐项落库，产出可追溯的安全与可用性审计报告。",
+      "applicationCategory": "SecurityApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "可达性检测",
+        "鉴权验证",
+        "模型真实性审计",
+        "流式透明执行",
+        "可追溯报告导出",
+        "TLS 证书检查",
+        "延迟抖动分析"
+      ]
+    }
+    </script>
+    <!-- 百度统计 -->
+    <script>
+    var _hmt = _hmt || [];
+    (function() {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?2d64efbdca7d194d27daa7a713abfa32";
+      var s = document.getElementsByTagName("script")[0];
+      s.parentNode.insertBefore(hm, s);
+    })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

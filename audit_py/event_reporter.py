@@ -67,6 +67,38 @@ def _slugify(text: str) -> str:
     return s or "section"
 
 
+def _fix_table_blanklines(md: str) -> str:
+    """移除 Markdown 表格行之间的多余空行，使表格能正确渲染。
+
+    p() 每条追加 '\\n'，render_markdown 用 '\\n'.join() 拼接，
+    导致两个连续 p() 输出的表格行之间出现空行（\\n\\n）。
+    空行在 Markdown 中会打断表格的连续性，使渲染器逐行显示而非表格格式。
+
+    算法：逐行扫描，当上一行和下一行都以 '|' 开头时，跳过中间的空行。
+    """
+    lines = md.split("\n")
+    out: list[str] = []
+    prev_is_table = False
+    for line in lines:
+        is_table = line.lstrip().startswith("|")
+        if line.strip() == "" and prev_is_table:
+            # 可能是表格行间的空行——暂存，等下一行判定。
+            # 如果下一行也是表格行，则跳过此空行；
+            # 如果下一行不是表格行，则保留（正常的段落间距）。
+            out.append(line)
+        else:
+            # 检查：是否要把 out 末尾的空行（暂存）删掉？
+            if is_table and out and out[-1].strip() == "":
+                # 前一行是空行，当前行是表格行 → 前面的空行是多余的，
+                # 但要确认空行之前的一行也是表格行才删（避免误删 h2/h3 后的正常间距）。
+                # 简化：只要 prev_is_table 且当前行也是表格行，删掉暂存空行。
+                if prev_is_table:
+                    out.pop()  # 删除暂存的空行
+            out.append(line)
+            prev_is_table = is_table
+    return "\n".join(out)
+
+
 class EventReporter:
     """实现 Reporter 全接口，把调用映射成 NDJSON 事件，并累积 Markdown 片段。
 
@@ -203,7 +235,13 @@ class EventReporter:
         msg = f"[code] {t}"
         emit(build_log(msg, LOG_INFO, step_id=self._cur_id))
         # 累积层：围栏代码块。
-        self._md_sections.append(f"```{lang}\n{t}\n```\n")
+        # 如果内容本身包含三反引号，用四反引号围栏避免嵌套冲突。
+        text = str(t)
+        fence_len = 3
+        while "```" + ("`" * (fence_len - 3)) in text:
+            fence_len += 1
+        fence = "`" * fence_len
+        self._md_sections.append(f"{fence}{lang}\n{text}\n{fence}\n")
 
     def flag(self, level: str, msg: str) -> None:
         status, log_level = _LEVEL_TO_STATUS.get(
@@ -284,5 +322,11 @@ class EventReporter:
         lines.append("---")
         lines.append("")
         # 各 step 的结构化明细 + 末尾总体评级节。
-        body = "\n".join(self._md_sections).strip()
+        # 逐片段拼接，再修复 Markdown 表格行间的多余空行：
+        # p() 每行末尾带 \n，join 又插入 \n → 表格行间出现空行，
+        # 导致表格无法在渲染器中正确预览。此处将连续的 | 开头行
+        # 之间的空行压缩掉。
+        raw = "\n".join(self._md_sections).strip()
+        # _fix_table_blanklines: 连续 | 行之间的空行去掉。
+        body = _fix_table_blanklines(raw)
         return "\n".join(lines) + "\n" + body + "\n"

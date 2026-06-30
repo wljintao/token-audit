@@ -224,15 +224,13 @@ def run(client, report, **kwargs):
     """Upstream channel classifier (v1.9). Informational only."""
     report.h2(f"13. {STEP_NAME_CN}")
     report.p(
-        "Fire a single minimal `/v1/messages` probe (`max_tokens=4`) and "
-        "classify the upstream serving channel from the response headers, "
-        "the message `id`, and the body. Complements Step 11 by detecting "
-        "post-relay upstream paths that only appear on authenticated "
-        "responses (`msg_bdrk_*` for Bedrock, `msg_vrtx_*` for Vertex, "
-        "`anthropic-ratelimit-*` for direct Anthropic, etc.). "
-        "**Informational only** in v1.9 -- not fed into the overall risk "
-        "rating. A non-Anthropic upstream is not by itself fraud; combine "
-        "with Step 5 identity findings.\n"
+        "发送一个最小的 `/v1/messages` 探测请求（`max_tokens=4`），"
+        "从响应头、消息 `id` 和响应体中分类上游服务通道。"
+        "补充步骤 11 的检测，识别仅在认证响应中出现的上游路径特征"
+        "（`msg_bdrk_*` 表示 Bedrock，`msg_vrtx_*` 表示 Vertex，"
+        "`anthropic-ratelimit-*` 表示 Anthropic 直连等）。"
+        "v1.9 中**仅为信息性**——不纳入整体风险评级。"
+        "非 Anthropic 上游本身不构成欺诈，需结合步骤 5 的身份检测结果。\n"
     )
 
     result = run_channel_classifier(client)
@@ -244,66 +242,63 @@ def run(client, report, **kwargs):
     error = result["error"]
     verdict = result["verdict"]
 
-    report.p("| Field | Value |")
-    report.p("|-------|-------|")
+    report.p("| 字段 | 值 |")
+    report.p("|------|-----|")
     if error:
-        report.p(f"| HTTP status | ERR: {error[:80]} |")
+        report.p(f"| HTTP 状态码 | 错误：{error[:80]} |")
     else:
-        report.p(f"| HTTP status | {raw_status if raw_status else '—'} |")
-    report.p(f"| message id | `{message_id or '—'}` |")
-    report.p(f"| classified channel | `{channel}` |")
-    report.p(f"| confidence | {confidence:.2f} |")
-    report.p(f"| verdict | `{verdict}` |")
+        report.p(f"| HTTP 状态码 | {raw_status if raw_status else '—'} |")
+    report.p(f"| 消息 ID | `{message_id or '—'}` |")
+    report.p(f"| 分类通道 | `{channel}` |")
+    report.p(f"| 置信度 | {confidence:.2f} |")
+    report.p(f"| 判定结果 | `{verdict}` |")
     if evidence:
         ev_str = ", ".join(evidence)[:200]
-        report.p(f"| evidence | {ev_str} |")
+        report.p(f"| 证据 | {ev_str} |")
     else:
-        report.p("| evidence | — |")
+        report.p("| 证据 | — |")
 
     if error:
-        report.p("\n**Transport error diagnosis:**")
+        report.p("\n**传输层错误诊断**：")
         report.p(format_diagnosis(_diagnosis_for_error(error)))
     elif verdict == "inconclusive" and raw_status:
-        report.p("\n**HTTP status diagnosis:**")
+        report.p("\n**HTTP 状态码诊断**：")
         report.p(format_diagnosis(_diagnosis_for_error(None, status=raw_status)))
 
     if verdict == "inconclusive":
         if error:
             report.flag(
                 "yellow",
-                f"Channel classifier **inconclusive**: probe transport error "
-                f"({error[:120]}). Cannot classify upstream channel.",
+                f"通道分类器**结果不确定**：探测传输错误"
+                f"（{error[:120]}）。无法分类上游通道。",
             )
         else:
             report.flag(
                 "yellow",
-                f"Channel classifier **inconclusive**: probe returned status "
-                f"{raw_status} (expected 200). Likely auth rejection, model "
-                "name mismatch, or upstream error envelope. Re-run with a "
-                "valid key + supported model to enable classification.",
+                f"通道分类器**结果不确定**：探测返回状态码 "
+                f"{raw_status}（预期 200）。可能是认证拒绝、模型名称不匹配"
+                "或上游错误封装。请使用有效的密钥和支持的模型重新运行以启用分类。",
             )
     elif channel == "anthropic-relay":
         report.flag(
             "green",
-            f"Upstream **transparent Anthropic relay** (confidence "
-            f"{confidence:.2f}, Tier 3 inference from native `msg_01...` id "
-            "with no rate-limit headers). The relay forwards Anthropic's "
-            "id verbatim but strips Anthropic's response headers. "
-            "Informational only in v1.9.",
+            f"上游为**透明 Anthropic 中继**（置信度 {confidence:.2f}，"
+            "基于原生 `msg_01...` ID 的 Tier 3 推断，无速率限制头）。"
+            "中继原样转发 Anthropic 的 ID 但剥离了 Anthropic 的响应头。"
+            "v1.9 中仅为信息性。",
         )
     elif channel == "unknown":
         report.flag(
             "green",
-            "Upstream channel **unknown**: probe succeeded (200) but no "
-            "Tier 1/2/3 signals fired. The relay strips or rewrites all "
-            "upstream identifiers, or this combination is not in our "
-            "signature DB. Informational only in v1.9.",
+            "上游通道**未知**：探测成功（200）但无 Tier 1/2/3 信号触发。"
+            "中继剥离或重写了所有上游标识符，或此组合不在我们的特征库中。"
+            "v1.9 中仅为信息性。",
         )
     else:
         report.flag(
             "green",
-            f"Upstream channel: **{channel}** (confidence "
-            f"{confidence:.2f}). Informational only in v1.9.",
+            f"上游通道：**{channel}**（置信度 {confidence:.2f}）。"
+            "v1.9 中仅为信息性。",
         )
 
     print(f"  Done: channel classifier ({channel}, conf={confidence:.2f}, "

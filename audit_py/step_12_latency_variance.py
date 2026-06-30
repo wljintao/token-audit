@@ -129,15 +129,11 @@ def run(client, report, **kwargs):
     probe_count = int(kwargs.get("probe_count", DEFAULT_PROBE_COUNT))
     report.h2(f"12. {STEP_NAME_CN}")
     report.p(
-        f"Fire {probe_count} identical minimal requests (``max_tokens=8``) "
-        "and measure per-request end-to-end latency. Compute "
-        "descriptive statistics and a gap-ratio bimodality heuristic. "
-        "Rationale: a relay that silently A/B tests between the "
-        "advertised model and a cheaper substitute produces a bimodal "
-        "latency distribution; a queue-multiplexing relay shows "
-        "multi-modal patterns. Stable low-variance latency is the "
-        "honest baseline. **Informational only** in v1.8 -- not fed "
-        "into the overall risk rating.\n"
+        f"发送 {probe_count} 个相同的最小请求（`max_tokens=8`），"
+        "测量每个请求的端到端延迟。计算描述性统计和基于间隔比的双峰分布检测。"
+        "原理：如果中转站在宣传模型和廉价替代品之间进行静默 A/B 测试，"
+        "会产生双峰延迟分布；队列多路复用的中转站会显示多峰模式。"
+        "稳定的低方差延迟是诚实基线。v1.8 中**仅为信息性**——不纳入整体风险评级。\n"
     )
 
     result = run_latency_variance(client, count=probe_count)
@@ -147,75 +143,82 @@ def run(client, report, **kwargs):
 
     if not latencies:
         if errors:
-            report.p("\n**Error diagnostics:**")
+            report.p("\n**错误诊断**：")
             for idx, error in enumerate(errors, start=1):
                 report.p(
-                    f"- probe {idx}: "
+                    f"- 探测 {idx}："
                     f"{format_diagnosis(_diagnosis_for_error(error))}"
                 )
         report.flag(
             "yellow",
-            f"Latency variance test inconclusive: all {len(errors)} "
-            "probes failed. The relay is refusing or erroring on even "
-            "tiny requests.",
+            f"延迟方差测试结果不确定：所有 {len(errors)} 个探测都失败。"
+            "中转站拒绝或错误处理了即使是最小的请求。",
         )
         print("  Done: latency variance (inconclusive, all probes errored)")
         return result
 
-    report.p("| Metric | Value |")
-    report.p("|--------|-------|")
-    report.p(f"| successful probes | {stats['count']} / {probe_count} |")
-    report.p(f"| failed probes | {len(errors)} |")
-    report.p(f"| min | {stats['min']:.3f}s |")
-    report.p(f"| median | {stats['median']:.3f}s |")
-    report.p(f"| max | {stats['max']:.3f}s |")
-    report.p(f"| mean | {stats['mean']:.3f}s |")
-    report.p(f"| stdev | {stats['stdev']:.3f}s |")
-    report.p(f"| coefficient of variation | {stats['cv']:.3f} |")
-    report.p(f"| largest-gap / median | {result['gap_ratio']:.3f} |")
-    report.p(f"| verdict | `{result['verdict']}` |")
+    report.p("| 指标 | 值 |")
+    report.p("|------|-----|")
+    report.p(f"| 成功探测数 | {stats['count']} / {probe_count} |")
+    report.p(f"| 失败探测数 | {len(errors)} |")
+    report.p(f"| 最小值 | {stats['min']:.3f}s |")
+    report.p(f"| 中位数 | {stats['median']:.3f}s |")
+    report.p(f"| 最大值 | {stats['max']:.3f}s |")
+    report.p(f"| 平均值 | {stats['mean']:.3f}s |")
+    report.p(f"| 标准差 | {stats['stdev']:.3f}s |")
+    report.p(f"| 变异系数 | {stats['cv']:.3f} |")
+    report.p(f"| 最大间隔/中位数 | {result['gap_ratio']:.3f} |")
+    report.p(f"| 判定结果 | `{_verdict_cn(result['verdict'])}` |")
 
     if errors:
-        report.p("\n**Error diagnostics:**")
+        report.p("\n**错误诊断**：")
         for idx, error in enumerate(errors, start=1):
-            report.p(f"- failed probe {idx}: {format_diagnosis(_diagnosis_for_error(error))}")
+            report.p(f"- 失败的探测 {idx}：{format_diagnosis(_diagnosis_for_error(error))}")
 
     verdict = result["verdict"]
     if verdict == "bimodal":
         report.flag(
             "yellow",
-            "Latency distribution is **bimodal**: probes cluster into "
-            "two distinct response-time groups. Possible silent A/B "
-            "testing between the advertised model and a cheaper "
-            "substitute. Informational only in v1.8 -- verify with "
-            "Step 5 identity checks and Step 11 infra fingerprint.",
+            "延迟分布呈**双峰**：探测结果聚集成两个不同的响应时间组。"
+            "可能在宣传模型和廉价替代品之间进行静默 A/B 测试。"
+            "v1.8 中仅为信息性——请结合步骤 5 身份检查和步骤 11 基础设施指纹验证。",
         )
     elif verdict == "high-variance":
         report.flag(
             "yellow",
-            f"Latency **high-variance** (CV={stats['cv']:.2f}). "
-            "Informational only in v1.8; could be network jitter, "
-            "congested upstream, or routing instability.",
+            f"延迟**高方差**（CV={stats['cv']:.2f}）。"
+            "v1.8 中仅为信息性；可能是网络抖动、上游拥塞或路由不稳定。",
         )
     elif verdict == "variable":
         report.flag(
             "green",
-            f"Latency **variable** (CV={stats['cv']:.2f}). "
-            "Within typical network-jitter range.",
+            f"延迟**有变化**（CV={stats['cv']:.2f}）。"
+            "在典型网络抖动范围内。",
         )
     elif verdict == "stable":
         report.flag(
             "green",
-            f"Latency **stable** (CV={stats['cv']:.2f}). "
-            "Consistent with a single honest upstream.",
+            f"延迟**稳定**（CV={stats['cv']:.2f}）。"
+            "与单一诚实上游一致。",
         )
     else:
         report.flag(
             "yellow",
-            f"Latency variance **inconclusive** (only {stats['count']} "
-            "successful probes). Re-run with --latency-probe-count >= 4.",
+            f"延迟方差**结果不确定**（仅 {stats['count']} 个成功探测）。"
+            "请使用 --latency-probe-count >= 4 重新运行。",
         )
 
     print(f"  Done: latency variance ({verdict}, "
           f"CV={stats['cv']:.2f}, n={stats['count']})")
     return result
+
+
+def _verdict_cn(verdict: str) -> str:
+    """将判定结果翻译为中文。"""
+    return {
+        "stable": "稳定",
+        "variable": "有变化",
+        "high-variance": "高方差",
+        "bimodal": "双峰",
+        "inconclusive": "不确定",
+    }.get(verdict, verdict)

@@ -173,6 +173,55 @@ def _lookup_whois(domain):
     return _run_optional_command(["whois", domain], timeout=10, max_lines=30)
 
 
+# CDN / WAF / 云厂商指纹特征（响应头关键词 → 厂商标识）
+_CDN_WAF_SIGNATURES = [
+    # CDN
+    ({"server": "cloudflare", "cf-ray": ""}, "Cloudflare CDN"),
+    ({"server": "cloudflare"}, "Cloudflare CDN"),
+    ({"via": "cloudfront"}, "AWS CloudFront CDN"),
+    ({"x-amz-cf-id": ""}, "AWS CloudFront CDN"),
+    ({"server": "gocache", "x-gocache": ""}, "GoCache CDN"),
+    ({"via": "1.1 google"}, "Google Cloud CDN"),
+    ({"server": "openresty"}, "OpenResty (可能为 CDN 节点)"),
+    ({"x-fastly-request-id": ""}, "Fastly CDN"),
+    ({"via": "ksyuncdn"}, "金山云 CDN"),
+    ({"x-ser": ""}, "网宿 CDN"),
+    ({"server": "hwcdn"}, "华为云 CDN"),
+    ({"x-trace-id": "", "server": "alicdn"}, "阿里云 CDN"),
+    # WAF
+    ({"server": "safe3waf"}, "Safe3 WAF"),
+    ({"server": "waf"}, "通用 WAF"),
+    ({"x-waf-event-info": ""}, "WAF 拦截"),
+    ({"server": "wallarm"}, "Wallarm WAF"),
+    ({"x-sucuri-id": ""}, "Sucuri WAF"),
+    ({"x-sucuri-cache": ""}, "Sucuri WAF"),
+    # 云厂商
+    ({"server": "aliyun"}, "阿里云"),
+    ({"x-oss-request-id": ""}, "阿里云 OSS"),
+    ({"server": "tcloud"}, "腾讯云"),
+    ({"server": "bfe"}, "百度云"),
+    ({"server": "awselb"}, "AWS ELB"),
+    ({"server": "google"}, "Google Cloud"),
+    ({"server": "gse"}, "Google Cloud"),
+]
+
+
+def _detect_cdn_waf(snapshot):
+    """根据响应头识别 CDN / WAF / 云厂商指纹。"""
+    if not snapshot or snapshot.get("error"):
+        return []
+    headers = {k.lower(): v.lower() for k, v in snapshot.get("headers", {}).items()}
+    hits = []
+    for signature, label in _CDN_WAF_SIGNATURES:
+        matched = all(
+            (not expected or expected in headers.get(key, ""))
+            for key, expected in signature.items()
+        )
+        if matched and label not in hits:
+            hits.append(label)
+    return hits
+
+
 # ============================================================
 # Step 1 public entry
 # ============================================================
@@ -184,37 +233,45 @@ def run(client, report, **kwargs) -> None:
     domain = urlparse(base_url).hostname
 
     # DNS
-    report.h3("1.1 DNS Records")
+    report.h3("1.1 DNS 解析记录")
     dns_records = _resolve_dns_records(domain)
     for rtype in ["A", "CNAME", "NS"]:
-        report.p(f"**{rtype}**: `{dns_records.get(rtype, '(empty)')}`")
+        report.p(f"**{rtype}**：`{dns_records.get(rtype, '(空)')}`")
 
     # WHOIS
-    report.h3("1.2 WHOIS")
+    report.h3("1.2 WHOIS 注册信息")
     parts = domain.split(".")
     main_domain = ".".join(parts[-2:]) if len(parts) >= 2 else domain
     whois = _lookup_whois(main_domain)
-    report.code(whois) if whois else report.p("whois not available on this host")
+    report.code(whois) if whois else report.p("当前主机未安装 whois 工具，无法查询注册信息")
 
     # SSL
-    report.h3("1.3 SSL Certificate")
+    report.h3("1.3 SSL 证书信息")
     ssl_info = _fetch_tls_certificate_summary(domain)
-    report.code(ssl_info) if ssl_info else report.p("Unable to retrieve SSL certificate")
+    report.code(ssl_info) if ssl_info else report.p("无法获取 SSL 证书信息")
 
     # HTTP headers
-    report.h3("1.4 HTTP Response Headers")
+    report.h3("1.4 HTTP 响应头")
     headers_snapshot = _fetch_http_snapshot(base_url, method="HEAD")
     if headers_snapshot.get("error"):
         headers_snapshot = _fetch_http_snapshot(base_url, method="GET")
     headers = _format_http_headers(headers_snapshot)
-    report.code(headers) if headers else report.p("Unable to retrieve response headers")
+    report.code(headers) if headers else report.p("无法获取 HTTP 响应头")
 
     # System identification
-    report.h3("1.5 System Identification")
+    report.h3("1.5 系统指纹识别")
     homepage_snapshot = _fetch_http_snapshot(base_url, method="GET")
     homepage = homepage_snapshot.get("body_preview") if homepage_snapshot else None
     if homepage:
         report.code(homepage[:500])
+    else:
+        report.p("无法获取首页内容用于系统识别")
+
+    # CDN / WAF / 云厂商指纹
+    cdn_hints = _detect_cdn_waf(headers_snapshot)
+    if cdn_hints:
+        report.h3("1.6 CDN / WAF / 云厂商识别")
+        report.p(", ".join(cdn_hints))
 
     # 信息性步骤：汇总关键发现作为结论，避免前端显示"(本项无明确结论)"。
     findings = []
@@ -230,6 +287,8 @@ def run(client, report, **kwargs) -> None:
         srv = headers_snapshot.get("headers", {}).get("Server") or headers_snapshot.get("headers", {}).get("server")
         if srv:
             findings.append(f"Server: {srv}")
-    summary = "Infrastructure recon completed" + (f" ({'; '.join(findings)})" if findings else "")
+    if cdn_hints:
+        findings.append("CDN/WAF: " + ", ".join(cdn_hints))
+    summary = "基础设施侦察完成" + (f"（{'; '.join(findings)}）" if findings else "")
     report.flag("green", summary)
     print("  Done: infrastructure recon")

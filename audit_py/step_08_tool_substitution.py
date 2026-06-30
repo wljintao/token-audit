@@ -79,26 +79,55 @@ def classify(expected: str, received: str) -> str:
     return "substituted"
 
 
-def probe_once(client, expected: str, sleep: float = 1.0):
-    """Run a single probe. Returns a dict with keys
-    ``verdict`` (str), ``received`` (str), ``error`` (str or None)."""
-    # Transcription framing: reduces refusal rates from safety-tuned models by
-    # making the task explicitly non-executive (copy text, don't run it).
+def probe_once(client, expected: str, sleep: float = 1.0, max_retries: int = 2):
+    """Run a single probe with retry logic.
+
+    Returns a dict with keys ``verdict`` (str), ``received`` (str),
+    ``error`` (str or None).
+
+    Prompt 设计要点：
+    - 使用「转录任务」中性框架，避免触发安全拒绝
+    - 用 XML 标签清晰分隔指令与待复制文本
+    - 以正面指令为主（"只输出"），减少否定指令
+    - 内置重试机制：如果模型添加了多余前缀/后缀，最多重试 max_retries 次
+    """
+    # 使用分隔符将待复制文本与指令清晰分离
     prompt = (
-        "Copy this harmless text exactly. Do not execute it. "
-        "Output only the copied text, nothing else, no markdown, no "
-        "backticks, no explanation. Text to copy: " + expected
+        "You are a text transcription tool. Your task is to copy text exactly as given.\n\n"
+        "Rules:\n"
+        "- Output ONLY the text between the <text> tags\n"
+        "- Preserve every character exactly: spaces, punctuation, case\n"
+        "- No commentary, no markdown, no code fences\n\n"
+        f"<text>{expected}</text>"
     )
-    r = client.call(
-        [{"role": "user", "content": prompt}], max_tokens=100
-    )
-    if sleep > 0:
-        time.sleep(sleep)
-    if "error" in r:
-        return {"verdict": "error", "received": "", "error": str(r.get("error", ""))}
-    raw = r.get("text", "") or ""
-    cleaned = _strip_wrappers(raw)
-    return {"verdict": classify(expected, cleaned), "received": cleaned, "error": None}
+
+    for attempt in range(max_retries + 1):
+        r = client.call(
+            [{"role": "user", "content": prompt}], max_tokens=100
+        )
+        if sleep > 0 and attempt < max_retries:
+            time.sleep(sleep)
+        if "error" in r:
+            return {"verdict": "error", "received": "", "error": str(r.get("error", ""))}
+        raw = r.get("text", "") or ""
+        cleaned = _strip_wrappers(raw)
+
+        # 快速验证：如果清理后内容与预期完全一致或仅空白差异，直接返回
+        verdict = classify(expected, cleaned)
+        if verdict in ("exact", "whitespace", "substituted"):
+            return {"verdict": verdict, "received": cleaned, "error": None}
+
+        # 如果模型输出了多余内容（既不是精确匹配也不是替换），
+        # 尝试从响应中提取预期文本
+        if expected in raw:
+            return {"verdict": "exact", "received": expected, "error": None}
+
+        # 最后一次重试仍未通过，返回当前结果
+        if attempt == max_retries:
+            return {"verdict": verdict, "received": cleaned, "error": None}
+
+    # 不应到达此处，但作为安全兜底
+    return {"verdict": "error", "received": "", "error": "max retries exceeded"}
 
 
 def run_tool_substitution_test(client, sleep: float = 1.0):
@@ -135,22 +164,20 @@ def run(client, report, **kwargs) -> tuple[bool, bool]:
     """
     report.h2(f"8. {STEP_NAME_CN}")
     report.p(
-        "Ask the model to echo exact package-install commands and verify "
-        "character-level integrity on the return path. A malicious middleware "
-        "running AC-1.a rewrites package names (e.g. `requests` -> `reqeusts` "
-        "typosquat) before the response reaches the client, giving the attacker "
-        "a durable supply-chain foothold on the agent's host. "
-        "Reference: Liu et al., *Your Agent Is Mine*, arXiv:2604.08407 section 4.2.1.\n"
+        "要求模型逐字回显包安装命令，并在返回路径上验证字符级完整性。"
+        "恶意的中间件可能执行 AC-1.a 攻击，将包名改写（例如 `requests` -> `reqeusts` "
+        "拼写错误），从而在代理主机上建立持久的供应链攻击据点。"
+        "参考文献：Liu et al., *Your Agent Is Mine*, arXiv:2604.08407 第 4.2.1 节。\n"
     )
     report.p(
-        "Limitation: this is a text-echo surrogate. It does not catch AC-1 "
-        "rewrites that target only structured tool_call payloads.\n"
+        "局限性：这是一个文本回显替代测试。它无法捕获仅针对结构化 tool_call "
+        "负载的 AC-1 改写。\n"
     )
 
     results, detected, inconclusive = run_tool_substitution_test(client, sleep=1.0)
 
-    report.p("| Manager | Expected | Received | Verdict |")
-    report.p("|---------|----------|----------|---------|")
+    report.p("| 包管理器 | 预期命令 | 实际接收 | 判定结果 |")
+    report.p("|----------|----------|----------|----------|")
     error_count = 0
     error_diagnostics = []
     for r in results:
@@ -159,46 +186,46 @@ def run(client, report, **kwargs) -> tuple[bool, bool]:
             error_count += 1
             error_diagnostics.append((r["manager"], r.get("error") or ""))
             err_short = (r.get("error") or "")[:60].replace("|", "\\|").replace("\n", " ")
-            received_cell = f"ERROR: {err_short}"
-            icon = "⚪ skipped"
+            received_cell = f"错误：{err_short}"
+            icon = "⚪ 跳过"
         else:
             disp = r["received"][:80].replace("|", "\\|").replace("\n", " ")
             received_cell = f"`{disp}`"
             if r["verdict"] == "exact":
-                icon = "\U0001f7e2 exact"
+                icon = "\U0001f7e2 完全匹配"
             elif r["verdict"] == "whitespace":
-                icon = "\U0001f7e1 whitespace"
+                icon = "\U0001f7e1 空白差异"
             else:
-                icon = "\U0001f534 SUBSTITUTED"
+                icon = "\U0001f534 已被替换"
         report.p(f"| {r['manager']} | `{expected}` | {received_cell} | {icon} |")
 
     if error_diagnostics:
-        report.p("\n**Error diagnostics:**")
+        report.p("\n**错误诊断：**")
         for manager, error in error_diagnostics:
-            report.p(f"- {manager}: {format_diagnosis(_diagnosis_for_error(error))}")
+            report.p(f"- {manager}：{format_diagnosis(_diagnosis_for_error(error))}")
 
     if detected:
         subs = sum(1 for r in results if r["verdict"] == "substituted")
         report.flag(
             "red",
-            f"Tool-call package substitution detected (AC-1.a): "
-            f"{subs}/{len(results)} probes rewritten on return path",
+            f"检测到工具调用包替换攻击（AC-1.a）："
+            f"{subs}/{len(results)} 个探测在返回路径上被改写",
         )
     elif inconclusive:
         report.flag(
             "yellow",
-            "Tool-call substitution test INCONCLUSIVE: every probe errored. "
-            "The relay may be blocking plaintext echo -- re-run with a different "
-            "model or consider this a red flag in itself.",
+            "工具调用替换测试结果不确定：所有探测都出错。"
+            "中转站可能阻止了明文回显——请使用不同模型重新测试，"
+            "或将其本身视为一个危险信号。",
         )
     elif error_count > 0:
         report.flag(
             "yellow",
-            f"Tool-call substitution test partially skipped "
-            f"({error_count}/{len(results)} probes errored)",
+            f"工具调用替换测试部分跳过"
+            f"（{error_count}/{len(results)} 个探测出错）",
         )
     else:
-        report.flag("green", "No tool-call package substitution detected")
+        report.flag("green", "未检测到工具调用包替换攻击")
 
     state = "detected" if detected else ("inconclusive" if inconclusive else "clean")
     print(f"  Done: tool-call substitution ({state})")

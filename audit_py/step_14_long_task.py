@@ -190,14 +190,14 @@ def run_multiturn_injection(client, turns: int = 5,
     convo = []
     offsets = []
     per_turn_user = [
-        "Name a primary color.",
-        "Name a fruit.",
-        "Name a planet.",
-        "Name a metal.",
-        "Name a continent.",
-        "Name an ocean.",
-        "Name a season.",
-        "Name a vegetable.",
+        "Explain why the sky appears blue using Rayleigh scattering.",
+        "Calculate the time complexity of binary search and justify your answer.",
+        "Describe the difference between TCP and UDP protocols.",
+        "Explain how a hash table handles collisions.",
+        "What is the CAP theorem and why does it matter in distributed systems?",
+        "Describe the difference between stack and heap memory allocation.",
+        "Explain the purpose of database indexing and its trade-offs.",
+        "What is the difference between concurrency and parallelism?",
     ]
     successes = 0
     for i in range(turns):
@@ -400,76 +400,73 @@ def test_long_task(client, report, sleep: float = 1.0):
     """
     report.h2(f"14. {STEP_NAME_CN}")
 
-    report.h3("14a. Structured tool_use tampering (AC-1.a)")
+    report.h3("14a. 结构化工具调用篡改检测 (AC-1.a)")
     report.p(
-        "Ask the model to emit quirky tokens via a structured tool_use block "
-        "and verify character-level integrity of the returned ``input.payload``. "
-        "Catches AC-1.a rewrites that target structured tool_call payloads, "
-        "which the Step 8 text-echo surrogate admits it cannot detect."
+        "要求模型通过结构化的 tool_use 块发出特殊标记，并验证返回的 "
+        "`input.payload` 的字符级完整性。可捕获步骤 8 文本回显替代方案"
+        "无法检测的针对结构化工具调用载荷的 AC-1.a 改写。"
     )
     tu = run_tool_use_integrity(client, sleep=sleep)
-    report.p("| Token | Verdict | Received |")
-    report.p("|-------|---------|----------|")
+    report.p("| 标记 | 判定结果 | 实际接收 |")
+    report.p("|------|----------|----------|")
     for r in tu["results"]:
         recv = (r.get("received") or "")[:50].replace("|", "\\|").replace("\n", " ")
         report.p(f"| `{r['token']}` | {r['verdict']} | `{recv}` |")
     if tu["detected"]:
-        report.flag("red", "Structured tool_use payload tampering detected (AC-1.a)")
+        report.flag("red", "检测到结构化工具调用载荷篡改 (AC-1.a)")
     elif tu["inconclusive"]:
-        report.flag("yellow", "tool_use integrity INCONCLUSIVE: no usable tool_use blocks returned")
+        report.flag("yellow", "工具调用完整性测试结果不确定：未返回可用的 tool_use 块")
     else:
-        report.flag("green", "No structured tool_use tampering detected")
+        report.flag("green", "未检测到结构化工具调用篡改")
 
-    report.h3("14b. Multi-turn conditional injection (AC-1.b)")
+    report.h3("14b. 多轮条件注入检测 (AC-1.b)")
     report.p(
-        "Hold a fixed system prompt over multiple turns and track the "
-        "input_tokens additive offset. A stable offset = constant hidden "
-        "prompt; a step discontinuity at turn N = conditional injection."
+        "在多轮对话中保持固定的系统提示，并追踪 input_tokens 的加性偏移。"
+        "稳定的偏移 = 恒定的隐藏提示；在第 N 轮出现阶跃不连续 = 条件注入。"
     )
     mt = run_multiturn_injection(client, turns=5, sleep=sleep)
-    report.p("| Turn | Reported input_tokens | Offset |")
-    report.p("|------|----------------------|--------|")
+    report.p("| 轮次 | 报告的 input_tokens | 偏移量 |")
+    report.p("|------|---------------------|--------|")
     for o in mt["offsets"]:
         if o.get("error"):
-            report.p(f"| {o['turn']} | ERROR | - |")
+            report.p(f"| {o['turn']} | 错误 | - |")
         else:
             report.p(f"| {o['turn']} | {o['reported']} | {o['offset']} |")
     if mt["detected"]:
-        report.flag("red", f"Conditional injection: offset jumped at turn {mt['discontinuity_turn']} (AC-1.b)")
+        report.flag("red", f"条件注入：偏移量在第 {mt['discontinuity_turn']} 轮发生跳变 (AC-1.b)")
     elif mt["inconclusive"]:
-        report.flag("yellow", "multi-turn injection INCONCLUSIVE: too few turns succeeded")
+        report.flag("yellow", "多轮注入测试结果不确定：成功轮次过少")
     else:
         guess = mt["stable_offset"]
-        report.flag("green", f"No conditional injection; stable offset ~{guess} tokens")
+        report.flag("green", f"未检测到条件注入；稳定偏移约 {guess} tokens")
 
-    report.h3("14c. History / tool_result tampering")
+    report.h3("14c. 历史/工具结果篡改检测")
     report.p(
-        "Plant a canary value in a tool_result on turn 1, then ask the model "
-        "to recall it on turn 2. A mismatch implies the relay rewrote the "
-        "tool_result between turns."
+        "在第 1 轮的工具结果中植入金丝雀值，然后在第 2 轮要求模型回忆。"
+        "如果不匹配，说明中转站在轮次之间重写了工具结果。"
     )
     ht = run_history_tamper(client, sleep=sleep)
     if ht["inconclusive"]:
-        report.flag("yellow", "history tamper INCONCLUSIVE: a turn errored")
+        report.flag("yellow", "历史篡改测试结果不确定：某一轮出错")
     elif ht["detected"]:
-        report.flag("red", f"History tampering: canary `{ht['canary']}` not recalled "
-                    f"(got `{(ht.get('recalled') or '')[:40]}`)")
+        report.flag("red", f"历史篡改：金丝雀值 `{ht['canary']}` 未被正确回忆"
+                    f"（实际得到 `{(ht.get('recalled') or '')[:40]}`）")
     else:
-        report.flag("green", "tool_result canary preserved across turns")
+        report.flag("green", "工具结果金丝雀值在轮次间完整保留")
 
-    report.h3("14d. Prompt-cache fidelity")
+    report.h3("14d. 提示缓存保真度检测")
     report.p(
-        "Send a cached system prompt twice and check the second call reports "
-        "``cache_read_input_tokens > 0``. A 0 means the relay strips "
-        "cache_control / the beta header (silent feature downgrade)."
+        "发送带缓存的系统提示两次，检查第二次调用是否报告 "
+        "`cache_read_input_tokens > 0`。如果为 0，说明中转站剥离了 "
+        "cache_control / beta 头（静默功能降级）。"
     )
     cf = run_cache_fidelity(client, sleep=sleep)
     if cf["inconclusive"]:
-        report.flag("yellow", f"cache fidelity INCONCLUSIVE: {cf.get('error','')}")
+        report.flag("yellow", f"缓存保真度测试结果不确定：{cf.get('error','')}")
     elif cf["honoured"]:
-        report.flag("green", f"Prompt caching honoured (read {cf['second_cache_read']} tokens)")
+        report.flag("green", f"提示缓存功能正常（读取了 {cf['second_cache_read']} tokens）")
     else:
-        report.flag("yellow", "Prompt caching NOT honoured: cache_control appears stripped")
+        report.flag("yellow", "提示缓存功能未被支持：cache_control 似乎被剥离")
 
     print("  Done: long-task / multi-request integrity")
     return {"tool_use": tu, "multiturn": mt, "history": ht, "cache": cf}

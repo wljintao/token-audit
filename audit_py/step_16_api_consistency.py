@@ -374,58 +374,57 @@ def test_api_consistency(client, report, sleep: float = 1.0):
     """Run all four conformance sub-checks and emit a report section."""
     report.h2(f"16. {STEP_NAME_CN}")
 
-    report.h3("16a. Beta-feature honoring (extended thinking)")
+    report.h3("16a. Beta 特性支持（扩展思考）")
     report.p(
-        "Request extended thinking with the anthropic-beta header and verify "
-        "a thinking block is returned. Absent => the beta header was stripped."
+        "使用 anthropic-beta 头请求扩展思考功能，并验证响应中是否包含 thinking 块。"
+        "如果缺失，说明 beta 头被剥离（静默降级）。"
     )
     bt = run_beta_thinking(client, sleep=sleep)
     if bt["inconclusive"]:
-        report.flag("yellow", f"beta-thinking INCONCLUSIVE: {bt.get('error','')}")
+        report.flag("yellow", f"Beta 思考测试结果不确定：{bt.get('error','')}")
     elif bt["detected_downgrade"]:
-        report.flag("yellow", "Extended thinking NOT returned: anthropic-beta header may be stripped (silent downgrade)")
+        report.flag("yellow", "未返回扩展思考：anthropic-beta 头可能被剥离（静默降级）")
     else:
-        report.flag("green", "Extended thinking honored (thinking block present)")
+        report.flag("green", "扩展思考功能正常（thinking 块存在）")
 
-    report.h3("16b. Tool-schema fidelity")
+    report.h3("16b. 工具 Schema 保真度")
     report.p(
-        "Send a tool with a distinctive parameter name and verify the model "
-        "can reproduce it. Failure implies the relay mangled the tool schema."
+        "发送带有特殊参数名的工具定义，并验证模型能否正确复现该参数名。"
+        "如果失败，说明中转站篡改了工具 schema。"
     )
     ts = run_tool_schema_fidelity(client, sleep=sleep)
     if ts["inconclusive"]:
-        report.flag("yellow", f"tool-schema INCONCLUSIVE: {ts.get('error','')}")
+        report.flag("yellow", f"工具 Schema 测试结果不确定：{ts.get('error','')}")
     elif ts["detected"]:
-        report.flag("red", "Tool schema NOT faithfully passed through: distinctive field missing (schema mangled)")
+        report.flag("red", "工具 Schema 未被忠实传递：特殊字段缺失（schema 被篡改）")
     else:
-        report.flag("green", "Tool schema passed through faithfully")
+        report.flag("green", "工具 Schema 被忠实传递")
 
-    report.h3("16c. max_tokens / stop_reason honoring")
+    report.h3("16c. max_tokens / stop_reason 遵守")
     report.p(
-        "Send max_tokens=5; verify output_tokens <= ~6 and stop_reason is "
-        "max_tokens/length. A long completion with end_turn means max_tokens "
-        "was ignored."
+        "发送 max_tokens=5 的请求，验证 output_tokens <= 6 且 stop_reason 为 "
+        "max_tokens/length。如果返回长文本且 stop_reason 为 end_turn，"
+        "说明 max_tokens 被忽略。"
     )
     mt = run_max_tokens_honoring(client, sleep=sleep)
     if mt["inconclusive"]:
-        report.flag("yellow", f"max_tokens INCONCLUSIVE: {mt.get('error','')}")
+        report.flag("yellow", f"max_tokens 测试结果不确定：{mt.get('error','')}")
     elif mt["honored"]:
-        report.flag("green", f"max_tokens honored (output={mt['output_tokens']}, stop={mt['stop_reason']})")
+        report.flag("green", f"max_tokens 被遵守（output={mt['output_tokens']}, stop={mt['stop_reason']}）")
     else:
-        report.flag("red", f"max_tokens NOT honored: output={mt['output_tokens']}, stop={mt['stop_reason']}")
+        report.flag("red", f"max_tokens 未被遵守：output={mt['output_tokens']}, stop={mt['stop_reason']}")
 
-    report.h3("16d. Mid-stream text injection")
+    report.h3("16d. 流式响应中间注入")
     report.p(
-        "Reassemble streaming deltas and scan for spliced promotional / "
-        "relay-branding markers that the user never requested."
+        "重组流式响应的文本增量，并扫描用户从未请求过的推广/中转站品牌标记。"
     )
     ms = run_midstream_injection(client, sleep=sleep)
     if ms["inconclusive"]:
-        report.flag("yellow", f"mid-stream INCONCLUSIVE: {ms.get('error','')}")
+        report.flag("yellow", f"流式注入测试结果不确定：{ms.get('error','')}")
     elif ms["detected"]:
-        report.flag("red", f"Mid-stream injection markers found: {ms['analysis']['markers_found']}")
+        report.flag("red", f"检测到流式注入标记：{ms['analysis']['markers_found']}")
     else:
-        report.flag("green", "No mid-stream injection markers detected")
+        report.flag("green", "未检测到流式注入标记")
 
     print("  Done: API conformance / silent downgrade")
     return {"beta_thinking": bt, "tool_schema": ts,

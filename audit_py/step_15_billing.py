@@ -292,60 +292,58 @@ def test_billing(client, report, sleep: float = 1.0):
     """Run all billing sub-checks and emit a report section."""
     report.h2(f"15. {STEP_NAME_CN}")
 
-    report.h3("15a. output_tokens inflation")
+    report.h3("15a. 输出 Token 膨胀检测")
     report.p(
-        "Send prompts that yield short ASCII replies and compare reported "
-        "output_tokens against a length-based floor. Reported > 3x floor "
-        "with a >50 token absolute gap flags inflation."
+        "发送会产生短 ASCII 回复的提示，并将报告的 output_tokens 与基于文本长度的下限进行比较。"
+        "报告值 > 3 倍下限且绝对差值 > 50 token 时标记为膨胀。"
     )
     oi = run_output_inflation(client, sleep=sleep)
-    report.p("| Reported | Floor | Ratio | Inflated? |")
-    report.p("|----------|-------|-------|-----------|")
+    report.p("| 报告值 | 下限 | 比率 | 是否膨胀？ |")
+    report.p("|--------|------|------|------------|")
     for r in oi["results"]:
         if r.get("error"):
-            report.p("| ERROR | - | - | - |")
+            report.p("| 错误 | - | - | - |")
         else:
             report.p(f"| {r['reported']} | {r['floor']} | {r['ratio']} | "
-                      f"{'YES' if r['inflated'] else 'no'} |")
+                      f"{'是' if r['inflated'] else '否'} |")
     if oi["detected"]:
-        report.flag("red", "output_tokens inflation detected: relay reports far more tokens than the text justifies")
+        report.flag("red", "检测到 output_tokens 膨胀：中转站报告的 token 数远超文本实际长度")
     elif oi["inconclusive"]:
-        report.flag("yellow", "output inflation INCONCLUSIVE: all probes errored")
+        report.flag("yellow", "输出膨胀测试结果不确定：所有探测均出错")
     else:
-        report.flag("green", "output_tokens consistent with returned text length")
+        report.flag("green", "output_tokens 与返回文本长度一致")
 
-    report.h3("15b. Cached-input double counting")
+    report.h3("15b. 缓存输入重复计费检测")
     report.p(
-        "Send a cached prompt twice and inspect the second call's usage. "
-        "If input_tokens >= cache_read_input_tokens on a cache hit, the "
-        "cached content is likely billed at full price too (double billing)."
+        "发送带缓存的提示两次，检查第二次调用的用量。"
+        "如果缓存命中时 input_tokens >= cache_read_input_tokens，"
+        "说明缓存内容可能按全价重复计费（双重收费）。"
     )
     cd = run_cache_double_count(client, sleep=sleep)
     if cd["inconclusive"]:
-        report.flag("yellow", f"cache double-count INCONCLUSIVE: {cd.get('error','no cache fields')}")
+        report.flag("yellow", f"缓存重复计费测试结果不确定：{cd.get('error','无缓存字段')}")
     elif cd["detected"]:
-        report.flag("yellow", f"Cached-input double billing suspected: {cd['classification']['reason']}")
+        report.flag("yellow", f"疑似缓存输入重复计费：{cd['classification']['reason']}")
     else:
-        report.flag("green", "Cache billing looks honest")
+        report.flag("green", "缓存计费看起来正常")
 
-    report.h3("15c. input_tokens under-report sanity")
+    report.h3("15c. 输入 Token 少报合理性检查")
     report.p(
-        "Send a long prompt and verify reported input_tokens is at least "
-        "20% of a length-based floor. Implausibly small values indicate a "
-        "broken or deceptive meter (weak signal)."
+        "发送长提示，验证报告的 input_tokens 至少达到基于长度下限的 20%。"
+        "极小的值表明计费器损坏或具有欺骗性（弱信号）。"
     )
     iu = run_input_underreport(client, sleep=sleep)
     for r in iu["results"]:
         if r.get("error"):
-            report.p("- probe errored")
+            report.p("- 探测出错")
         else:
-            report.p(f"- floor={r['floor']} reported={r['reported']} ratio={r['ratio']}")
+            report.p(f"- 下限={r['floor']} 报告值={r['reported']} 比率={r['ratio']}")
     if iu["detected"]:
-        report.flag("yellow", "input_tokens implausibly small vs payload (broken/deceptive meter)")
+        report.flag("yellow", "input_tokens 相对于载荷异常偏小（计费器损坏/欺骗性）")
     elif iu["inconclusive"]:
-        report.flag("yellow", "input under-report INCONCLUSIVE: probe errored")
+        report.flag("yellow", "输入少报测试结果不确定：探测出错")
     else:
-        report.flag("green", "input_tokens within plausible range")
+        report.flag("green", "input_tokens 在合理范围内")
 
     print("  Done: billing / usage integrity")
     return {"output_inflation": oi, "cache_double_count": cd,

@@ -177,18 +177,15 @@ def run(client, report, **kwargs) -> tuple[str, bool]:
     """Stream integrity test (AC-1 SSE-level)."""
     report.h2(f"10. {STEP_NAME_CN}")
     report.p(
-        "Open an Anthropic streaming request with thinking enabled and "
-        "inspect every SSE event for structural anomalies. A relay that "
-        "rewrites or downgrades the streamed response often fails one "
-        "of four invariants: (1) all event types belong to Anthropic's "
-        "known set (ping / message_start / content_block_start / "
-        "content_block_delta / content_block_stop / message_delta / "
-        "message_stop); (2) ``input_tokens`` is consistent across "
-        "``message_start`` and ``message_delta``; (3) ``output_tokens`` "
-        "is monotonically non-decreasing; (4) ``signature_delta`` events "
-        "carry non-empty signature values. Detection concept sourced from "
-        "hvoy.ai's claude_detector.py, verified against source on "
-        "2026-04-11. See reference_hvoy_relayapi memory for details.\n"
+        "开启一个启用 thinking 的 Anthropic 流式请求，检查每个 SSE 事件的结构完整性。"
+        "改写或降级流式响应的中转站通常会违反以下四个不变量之一："
+        "(1) 所有事件类型属于 Anthropic 已知集合（ping / message_start / "
+        "content_block_start / content_block_delta / content_block_stop / "
+        "message_delta / message_stop）；"
+        "(2) `input_tokens` 在 `message_start` 和 `message_delta` 之间一致；"
+        "(3) `output_tokens` 单调非递减；"
+        "(4) `signature_delta` 事件携带非空签名值。"
+        "检测概念源自 hvoy.ai 的 claude_detector.py，于 2026-04-11 验证。\n"
     )
 
     signals = client.stream_call(
@@ -199,53 +196,89 @@ def run(client, report, **kwargs) -> tuple[str, bool]:
     analysis = analyze_stream(signals)
     verdict = analysis["verdict"]
 
-    report.p("| Check | Result |")
-    report.p("|-------|--------|")
-    report.p(f"| Event shape | {analysis['event_shape']} |")
+    report.p("| 检查项 | 结果 |")
+    report.p("|--------|------|")
+    report.p(f"| 事件形状 | {_event_shape_cn(analysis['event_shape'])} |")
     report.p(
-        "| Unknown events | "
+        "| 未知事件类型 | "
         + (", ".join(analysis["unknown_events"]) if analysis["unknown_events"] else "—")
         + " |"
     )
-    report.p(f"| Usage monotonic | {'yes' if analysis['usage_monotonic'] else 'NO'} |")
-    report.p(f"| Usage consistent | {'yes' if analysis['usage_consistent'] else 'NO'} |")
-    report.p(f"| Signature valid | {'yes' if analysis['signature_valid'] else 'NO'} |")
+    report.p(f"| 用量单调性 | {'✅ 是' if analysis['usage_monotonic'] else '❌ 否'} |")
+    report.p(f"| 用量一致性 | {'✅ 是' if analysis['usage_consistent'] else '❌ 否'} |")
+    report.p(f"| 签名有效性 | {'✅ 是' if analysis['signature_valid'] else '❌ 否'} |")
     report.p(
-        f"| Stream model | {analysis['stream_model_name'] or '—'} "
-        f"({'claude' if analysis['stream_model_is_claude'] else 'NOT claude'}) |"
+        f"| 流模型标识 | {analysis['stream_model_name'] or '—'} "
+        f"({'✅ Claude' if analysis['stream_model_is_claude'] else '❌ 非 Claude'}) |"
     )
-    report.p(f"| Total events seen | {signals.raw_event_count} |")
+    report.p(f"| 事件总数 | {signals.raw_event_count} |")
     if signals.total_duration_seconds is not None:
-        report.p(f"| Duration | {signals.total_duration_seconds:.2f}s |")
+        report.p(f"| 耗时 | {signals.total_duration_seconds:.2f}s |")
 
     if analysis["findings"]:
-        report.p("\n**Findings**:")
+        report.p("\n**检测发现**：")
         for finding in analysis["findings"]:
-            report.p(f"- {finding}")
+            report.p(f"- {_translate_finding(finding)}")
     if signals.transport_error:
-        report.p("\n**Transport error diagnosis:**")
+        report.p("\n**传输层错误诊断**：")
         report.p(format_diagnosis(_diagnosis_for_error(signals.transport_error)))
 
     if verdict == "anomaly":
+        findings_cn = [_translate_finding(f) for f in analysis["findings"]]
         report.flag(
             "red",
-            "Stream integrity anomaly detected (AC-1 SSE-level): "
-            + "; ".join(analysis["findings"])[:400],
+            "检测到流完整性异常（AC-1 SSE 层）："
+            + "；".join(findings_cn)[:400],
         )
     elif verdict == "inconclusive":
+        findings_cn = [_translate_finding(f) for f in analysis["findings"]]
         report.flag(
             "yellow",
-            "Stream integrity test INCONCLUSIVE: "
-            + "; ".join(analysis["findings"])[:400]
-            + ". A non-Anthropic relay or broken stream cannot be audited "
-              "at the SSE event layer.",
+            "流完整性测试结果不确定："
+            + "；".join(findings_cn)[:400]
+            + "。非 Anthropic 中转站或损坏的流无法在 SSE 事件层进行审计。",
         )
     else:
         report.flag(
             "green",
-            "Stream integrity clean: SSE whitelist + usage monotonicity "
-            "+ signature validity + stream model identity all passed",
+            "流完整性检查通过：SSE 事件白名单 + 用量单调性 + "
+            "签名有效性 + 流模型标识 全部正常",
         )
 
     print(f"  Done: stream integrity ({verdict})")
     return verdict, verdict == "inconclusive"
+
+
+# ============================================================
+# 中文映射辅助函数
+# ============================================================
+
+def _event_shape_cn(shape: str) -> str:
+    return {"pass": "✅ 完整", "partial": "⚠️ 部分", "weak": "❌ 薄弱"}.get(shape, shape)
+
+
+def _translate_finding(finding: str) -> str:
+    """将 analyze_stream 的英文发现翻译为中文。"""
+    translations = [
+        ("Stream contained", "流中包含"),
+        ("unknown SSE event type(s)", "个未知 SSE 事件类型"),
+        ("(+more, capped)", "（更多，已截断）"),
+        ("output_tokens samples across message_delta events went backwards at least once — a relay is rewriting usage fields",
+         "message_delta 事件中的 output_tokens 样本至少有一次回退——中转站正在改写用量字段"),
+        ("input_tokens at message_start", "message_start 的 input_tokens"),
+        ("disagrees with message_delta samples", "与 message_delta 样本不一致——用量改写"),
+        ("signature_delta event(s) had empty signatures — thinking block downgrade or rewriter",
+         "个 signature_delta 事件签名为空——thinking 块被降级或改写"),
+        ("Stream's message_start.message.model =", "流的 message_start.message.model ="),
+        ("does not contain 'claude' — relay may be routing to a substitute model",
+         "不包含 'claude'——中转站可能路由到了替代模型"),
+        ("Stream omitted message_start.message.model entirely — relay may be stripping model identity to hide a downgrade",
+         "流完全省略了 message_start.message.model——中转站可能剥离了模型标识以隐藏降级"),
+        ("Stream opened but produced no non-ping events — the relay is either broken or does not speak Anthropic SSE",
+         "流已开启但未产生任何非 ping 事件——中转站可能已损坏或不支持 Anthropic SSE"),
+        ("Stream transport error", "流传输错误"),
+    ]
+    result = finding
+    for en, cn in translations:
+        result = result.replace(en, cn)
+    return result

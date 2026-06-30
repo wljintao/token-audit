@@ -314,49 +314,49 @@ def run_tls_audit(base_url: str, report, timeout: int = 15) -> dict:
     host = parsed.hostname or ""
     report.h2(f"18. {STEP_NAME_CN}")
     if not host:
-        report.flag("yellow", "TLS audit skipped: no hostname in URL")
+        report.flag("yellow", "TLS 审计跳过：URL 中未找到主机名")
         return {"skipped": True}
 
     # (a)+(b) TLS version / cipher
-    report.h3("18a. TLS version & cipher")
+    report.h3("18a. TLS 版本与加密套件")
     curl_out = _capture_curl_verbose(base_url, timeout=timeout)
     version = parse_tls_version(curl_out)
     cipher = parse_tls_cipher(curl_out)
     cls = classify_tls(version, cipher)
-    report.p(f"**Version**: `{version or '(unknown)'}`")
-    report.p(f"**Cipher**: `{cipher or '(unknown)'}`")
+    report.p(f"**版本**：`{version or '(未知)'}`")
+    report.p(f"**加密套件**：`{cipher or '(未知)'}`")
     if cls["verdict"] == "weak":
-        report.flag("red", f"Weak TLS: version={version} cipher={cipher} "
-                    f"(weak_version={cls['weak_version']}, weak_cipher={cls['weak_cipher']})")
+        report.flag("red", f"弱 TLS：版本={version} 加密套件={cipher} "
+                    f"(弱版本={cls['weak_version']}, 弱加密={cls['weak_cipher']})")
     elif cls["verdict"] == "strong":
-        report.flag("green", f"Strong TLS session ({version} / {cipher})")
+        report.flag("green", f"强 TLS 会话（{version} / {cipher}）")
     else:
-        report.flag("yellow", "TLS version/cipher could not be captured (curl -v unavailable?)")
+        report.flag("yellow", "无法捕获 TLS 版本/加密套件（curl -v 不可用？）")
 
     # (c) cert chain
-    report.h3("18b. Certificate chain")
+    report.h3("18b. 证书链")
     openssl_out = _capture_openssl(host, timeout=timeout)
     cert = classify_cert(openssl_out, host, datetime.now(timezone.utc))
-    report.p(f"**Subject**: `{cert['subject'] or '(unknown)'}`")
-    report.p(f"**Issuer**: `{cert['issuer'] or '(unknown)'}`")
-    report.p(f"**notAfter**: `{cert['not_after'] or '(unknown)'}`")
-    report.p(f"**Signature**: `{cert['signature_algorithm'] or '(unknown)'}`")
+    report.p(f"**主题**：`{cert['subject'] or '(未知)'}`")
+    report.p(f"**颁发者**：`{cert['issuer'] or '(未知)'}`")
+    report.p(f"**过期时间**：`{cert['not_after'] or '(未知)'}`")
+    report.p(f"**签名算法**：`{cert['signature_algorithm'] or '(未知)'}`")
     if cert["issues"]:
-        report.flag("red", f"Certificate issues: {', '.join(cert['issues'])}")
+        report.flag("red", f"证书问题：{', '.join(cert['issues'])}")
     else:
-        report.flag("green", "Certificate chain valid (not expired, CA-signed, hostname match)")
+        report.flag("green", "证书链有效（未过期、CA 签发、主机名匹配）")
 
     # (d) HTTPS downgrade
-    report.h3("18c. HTTP downgrade / HSTS")
+    report.h3("18c. HTTP 降级 / HSTS")
     redir = _check_https_redirect(base_url, timeout=timeout)
     if redir.get("checked"):
         if redir["redirects_to_https"]:
-            report.flag("green", f"http:// redirects to https:// ({redir['http_code']})")
+            report.flag("green", f"http:// 重定向到 https://（{redir['http_code']}）")
         else:
-            report.flag("yellow", f"http:// does NOT redirect to https:// "
-                        f"(code={redir['http_code']}, redirect={redir.get('redirect_url')})")
+            report.flag("yellow", f"http:// 未重定向到 https://"
+                        f"（状态码={redir['http_code']}, 重定向={redir.get('redirect_url')}）")
     else:
-        report.p(f"HTTP downgrade check skipped: {redir.get('error','')}")
+        report.p(f"HTTP 降级检查跳过：{redir.get('error','')}")
 
     print("  Done: transport-layer security")
     return {"tls": cls, "cert": cert, "redirect": redir}
@@ -515,7 +515,7 @@ def run(client, report, **kwargs):
     other per-call options. Step 18 (TLS) reads ``client.base_url``
     itself so the same signature works across the 6 companions.
     """
-    return test_tls(client, report, **kwargs)
+    return test_tls(client.base_url, report, **kwargs)
 
 
 if __name__ == "__main__":

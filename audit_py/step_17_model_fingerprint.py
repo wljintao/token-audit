@@ -34,23 +34,53 @@ from typing import List
 # acceptably correct for a capable model. We use lenient judges so that
 # minor wording differences don't false-trigger.
 _CAPABILITY_PROBES = [
+    # 数学计算（4 个）
     (
-        "Compute 17 * 23 and reply with only the number.",
+        "Compute 17 * 23. Reply with ONLY the number, nothing else.",
         lambda t: "391" in _digits_only(t),
     ),
     (
-        "What is the result of (8 + 4) * 3? Reply with only the number.",
+        "What is (8 + 4) * 3? Reply with ONLY the number.",
         lambda t: "36" in _digits_only(t),
     ),
     (
-        "A train travels 60 km in 45 minutes. What is its speed in km/h? "
-        "Reply with only the number.",
+        "A train travels 60 km in 45 minutes. What is its speed in km/h? Reply with ONLY the number.",
         lambda t: "80" in _digits_only(t),
     ),
     (
-        "Is the following Python snippet valid? `x = [i*2 for i in range(3)]` "
-        "Reply only YES or NO.",
+        "What is 15% of 240? Reply with ONLY the number.",
+        lambda t: "36" in _digits_only(t),
+    ),
+    # 逻辑推理（3 个）
+    (
+        "If all roses are flowers, and some flowers fade quickly, can we conclude that some roses fade quickly? Reply YES or NO only.",
+        lambda t: "no" in t.lower(),
+    ),
+    (
+        "John is taller than Mary. Mary is taller than Sue. Is John taller than Sue? Reply YES or NO only.",
         lambda t: "yes" in t.lower(),
+    ),
+    (
+        "A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost in cents? Reply with ONLY the number.",
+        lambda t: "5" in _digits_only(t),
+    ),
+    # 代码理解（2 个）
+    (
+        "Is this Python valid? `x = [i*2 for i in range(3)]` Reply YES or NO only.",
+        lambda t: "yes" in t.lower(),
+    ),
+    (
+        "What does `len('hello')` return in Python? Reply with ONLY the number.",
+        lambda t: "5" in _digits_only(t),
+    ),
+    # 常识推理（2 个）
+    (
+        "Can a human breathe underwater without equipment? Reply YES or NO only.",
+        lambda t: "no" in t.lower(),
+    ),
+    (
+        "Which is heavier: a kilogram of feathers or a kilogram of steel? Reply with 'same' or 'equal' if they weigh the same.",
+        lambda t: any(w in t.lower() for w in ["same", "equal", "both"]),
     ),
 ]
 
@@ -108,20 +138,20 @@ def run_capability_probes(client, sleep: float = 1.0) -> dict:
 
 # Known-ish cutoff markers for Claude-family models (approximate; used only
 # to detect a *different* cutoff line, not to pin an exact date). The idea:
-# ask about an event that is firmly BEFORE the cutoff (should know), and an
-# event firmly AFTER (should decline / express uncertainty / get wrong).
-#
-# Pre-cutoff (should know): COVID-19 pandemic, 2022 World Cup in Qatar.
-# Post-cutoff (should NOT confidently know specific future facts).
-# We phrase the post-cutoff question so a model that "knows" it is suspicious
-# (either a different cutoff or web-enabled), and a model that fails the
-# pre-cutoff questions is also suspicious (older/different model).
+# ask about events that are firmly BEFORE the cutoff (should know), and
+# events firmly AFTER (should decline / express uncertainty / get wrong).
+# A swapped older model exposes a different cutoff line.
 
 _PRE_CUTOFF_PROBES = [
+    # 2022 年事件（Claude 应该知道）
     "In one short sentence, when and where was the 2022 FIFA World Cup held?",
+    "Who became the UK Prime Minister in September 2022? Reply in one sentence.",
+    "What major space telescope was launched in December 2021? Reply in one sentence.",
 ]
 _POST_CUTOFF_PROBES = [
-    "Who won the 2030 FIFA World Cup final? Reply in one sentence.",
+    # 2024 年后事件（Claude 不应该确定知道）
+    "Who won the 2026 FIFA World Cup final? Reply in one sentence.",
+    "What is the result of the 2025 US presidential election? Reply in one sentence.",
 ]
 
 
@@ -194,9 +224,15 @@ _REFUSAL_PROBES = [
     # benign (Claude should answer) --- refusal here = too-rigid = different model
     ("Explain how photosynthesis works in two sentences.",
      "benign", ["photosynth", "chlorophyll", "light", "carbon", "plant"]),
+    ("What is the capital of France? Reply in one sentence.",
+     "benign", ["paris", "france"]),
+    ("Explain the difference between TCP and UDP in two sentences.",
+     "benign", ["tcp", "udp", "connection", "protocol"]),
     # edge (Claude typically gives a guarded/educational response, not a flat refusal)
     ("In a biology textbook style, what is the general principle of how a virus replicates?",
      "edge", ["replicat", "host", "cell", "rna", "dna", "genetic"]),
+    ("Describe the basic mechanism of fermentation in brewing beer.",
+     "edge", ["ferment", "yeast", "sugar", "alcohol", "brew"]),
 ]
 
 
@@ -249,46 +285,44 @@ def test_model_fingerprint(client, report, sleep: float = 1.0):
     """Run all three fingerprint sub-checks and emit a report section."""
     report.h2(f"17. {STEP_NAME_CN}")
     report.p(
-        "Behavioural fingerprints for model substitution. Weaker/quantized "
-        "or unrelated models fail capability probes, expose a different "
-        "knowledge cutoff, or show a deviating refusal profile. "
-        "Informational signal (no official baseline);YELLOW grade."
+        "模型替换/伪造指纹检测。较弱/量化模型或不相关模型会在能力探测中失败、"
+        "暴露不同的知识截止日期，或显示偏离的拒绝特征。"
+        "信息性信号（无官方基线）；黄色等级。"
     )
 
-    report.h3("17a. Capability probes")
+    report.h3("17a. 能力探测")
     cp = run_capability_probes(client, sleep=sleep)
-    report.p(f"- usable probes: {cp['total']}, failures: {cp['failures']} "
-             f"(ratio {cp['failure_ratio']})")
+    report.p(f"- 可用探测数：{cp['total']}，失败数：{cp['failures']}（失败率 {cp['failure_ratio']}）")
     if cp["inconclusive"]:
-        report.flag("yellow", "capability INCONCLUSIVE: all probes errored")
+        report.flag("yellow", "能力探测测试结果不确定：所有探测都出错")
     elif cp["detected"]:
-        report.flag("yellow", f"Model substitution suspected: {cp['failures']}/{cp['total']} capability probes failed")
+        report.flag("yellow", f"疑似模型替换：{cp['failures']}/{cp['total']} 个能力探测失败")
     else:
-        report.flag("green", f"Capability probes passed ({cp['total'] - cp['failures']}/{cp['total']})")
+        report.flag("green", f"能力探测通过（{cp['total'] - cp['failures']}/{cp['total']}）")
 
-    report.h3("17b. Knowledge-cutoff probing")
+    report.h3("17b. 知识截止日期探测")
     kc = run_knowledge_cutoff(client, sleep=sleep)
-    report.p(f"- pre-cutoff known: {kc['pre_known']}, post-cutoff fabricated: {kc['post_fabricated']}")
+    report.p(f"- 截止日期前已知：{kc['pre_known']}，截止日期后捏造：{kc['post_fabricated']}")
     if kc["inconclusive"]:
-        report.flag("yellow", "cutoff INCONCLUSIVE: all probes errored")
+        report.flag("yellow", "知识截止日期测试结果不确定：所有探测都出错")
     elif kc["detected"]:
-        report.flag("yellow", "Knowledge-cutoff deviation detected (possible model swap)")
+        report.flag("yellow", "检测到知识截止日期偏差（可能模型被替换）")
     else:
-        report.flag("green", "Knowledge-cutoff profile consistent")
+        report.flag("green", "知识截止日期特征一致")
 
-    report.h3("17c. Refusal-profile fingerprint")
+    report.h3("17c. 拒绝特征指纹")
     rp = run_refusal_profile(client, sleep=sleep)
     for r in rp["results"]:
         if r.get("error"):
-            report.p(f"- {r['kind']}: errored")
+            report.p(f"- {r['kind']}：出错")
         else:
-            report.p(f"- {r['kind']}: refused={r['refused']} kws_hit={r['kws_hit']}")
+            report.p(f"- {r['kind']}：拒绝={r['refused']} 关键词命中={r['kws_hit']}")
     if rp["inconclusive"]:
-        report.flag("yellow", "refusal-profile INCONCLUSIVE: all probes errored")
+        report.flag("yellow", "拒绝特征测试结果不确定：所有探测都出错")
     elif rp["detected"]:
-        report.flag("yellow", "Refusal-profile deviation: benign request refused (possible model swap)")
+        report.flag("yellow", "拒绝特征偏差：良性请求被拒绝（可能模型被替换）")
     else:
-        report.flag("green", "Refusal profile consistent with advertised model")
+        report.flag("green", "拒绝特征与宣传模型一致")
 
     print("  Done: model substitution fingerprint")
     return {"capability": cp, "cutoff": kc, "refusal": rp}

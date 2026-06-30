@@ -176,28 +176,25 @@ def run(client, report, **kwargs):
     """Infrastructure fingerprint (v1.8). Informational only."""
     report.h2(f"11. {STEP_NAME_CN}")
     report.p(
-        "Probe the relay's ``/``, ``/v1/models``, and a nonexistent "
-        "endpoint with unauthenticated GET requests, then match "
-        "response headers and body against a small database of known "
-        "relay-framework signatures. Rationale: Zhang et al., *Real "
-        "Money, Fake Models*, arXiv:2603.01919, reports 11 of 17 "
-        "identified shadow APIs are built on OneAPI / NewAPI forks. "
-        "Framework identification is **informational only** in v1.8 "
-        "-- it does not feed into the overall risk rating.\n"
+        "使用未认证的 GET 请求探测中转站的 `/`、`/v1/models` 和一个不存在的端点，"
+        "然后将响应头和响应体与已知中转站框架的特征库进行匹配。"
+        "背景：Zhang et al., *Real Money, Fake Models*, arXiv:2603.01919 "
+        "报告称，17 个已识别的影子 API 中有 11 个基于 OneAPI / NewAPI 分支构建。"
+        "框架识别在 v1.8 中**仅为信息性**——不纳入整体风险评级。\n"
     )
 
     results = run_infra_fingerprint(client)
 
-    report.p("| Probe | Path | Status | Framework | Signals |")
-    report.p("|-------|------|--------|-----------|---------|")
+    report.p("| 探测点 | 路径 | 状态码 | 框架 | 匹配信号 |")
+    report.p("|--------|------|--------|------|----------|")
     error_diagnostics = []
     for r in results:
-        name = r["probe"]
+        name = _probe_name_cn(r["probe"])
         path = r["path"]
         status_cell = str(r["status"]) if r["status"] else "—"
         if r["error"]:
             error_diagnostics.append((name, r["error"]))
-            status_cell = f"ERR: {r['error'][:40]}"
+            status_cell = f"错误：{r['error'][:40]}"
         framework = r["framework"] or "—"
         if r["signals"]:
             sig_strs = [f"{src}='{needle}'" for src, needle in r["signals"]]
@@ -207,39 +204,46 @@ def run(client, report, **kwargs):
         report.p(f"| {name} | `{path}` | {status_cell} | `{framework}` | {signals_cell} |")
 
     if error_diagnostics:
-        report.p("\n**Transport error diagnostics:**")
+        report.p("\n**传输层错误诊断**：")
         for name, error in error_diagnostics:
-            report.p(f"- {name}: {format_diagnosis(_diagnosis_for_error(error))}")
+            report.p(f"- {name}：{format_diagnosis(_diagnosis_for_error(error))}")
 
     merged_headers = {}
     for r in results:
         for k, v in r["headers"].items():
             merged_headers.setdefault(k, v)
     if merged_headers:
-        report.p("\n**Operator-profile headers**:")
+        report.p("\n**运营商标识头**：")
         for k, v in merged_headers.items():
-            report.p(f"- `{k}`: `{v[:120]}`")
+            report.p(f"- `{k}`：`{v[:120]}`")
 
     framework, confidence = aggregate_framework(results)
 
     if confidence == "confirmed":
         report.flag(
             "green",
-            f"Relay framework identified: **{framework}** "
-            f"(confirmed by multiple probes). Informational only in v1.8.",
+            f"中转站框架已识别：**{framework}**"
+            f"（多个探测点确认）。v1.8 中仅为信息性。",
         )
     elif confidence == "tentative":
         report.flag(
             "green",
-            f"Relay framework possibly **{framework}** "
-            f"(single probe hit). Informational only in v1.8.",
+            f"中转站框架可能为 **{framework}**"
+            f"（单个探测点命中）。v1.8 中仅为信息性。",
         )
     else:
         report.flag(
             "green",
-            "No framework branding detected. Likely a direct reverse "
-            "proxy, a custom backend, or a stripped-branding fork.",
+            "未检测到框架品牌标识。可能是直接反向代理、自定义后端或已剥离品牌的分支版本。",
         )
 
     print(f"  Done: infra fingerprint ({framework or 'unknown'}/{confidence})")
     return framework, confidence
+
+
+# ============================================================
+# 中文映射辅助函数
+# ============================================================
+
+def _probe_name_cn(name: str) -> str:
+    return {"landing": "首页", "models": "模型列表", "notfound": "不存在端点"}.get(name, name)

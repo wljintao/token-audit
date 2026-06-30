@@ -5,15 +5,10 @@ import type { AuditRequest } from "../types";
 const props = defineProps<{ loading: boolean }>();
 const emit = defineEmits<{ (e: "submit", value: AuditRequest): void }>();
 
-// const form = reactive({
-//   baseUrl: "https://api.openai.com/v1",
-//   apiKey: "",
-//   modelId: "",
-// });
 const form = reactive({
-  baseUrl: "https://anyllm.cc/api/v1",
-  apiKey: "sk-1e0f31479ea86c3333b6f3f6424e94a09509b0ed95203e6e",
-  modelId: "claude-opus-4-6",
+  baseUrl: "https://api.example.com/v1",
+  apiKey: "",
+  modelId: "",
 });
 
 const valid = computed(

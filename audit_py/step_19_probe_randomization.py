@@ -209,67 +209,108 @@ def fingerprint_resistance(variants: List[str]) -> dict:
 # (b) Audit-detection probe (differential behavior)
 # ============================================================
 
-# The audit's canonical "Say hi" probe vs a normal-user phrasing. If a relay
+# The audit's canonical probe vs a normal-user phrasing. If a relay
 # differentiates responses to these two shapes, it is fingerprinting traffic.
 _AUDIT_SHAPE_SYSTEM = "You are a helpful assistant."
-_NORMAL_SHAPE_SYSTEM = (
-    "You are Jarvis, a personal AI assistant integrated into a developer's "
-    "terminal. Be concise and friendly."
-)
+
+# Multiple normal-shape system prompts to simulate real user scenarios
+_NORMAL_SHAPE_SYSTEMS = [
+    "You are Jarvis, a personal AI assistant integrated into a developer's terminal. Be concise and friendly.",
+    "You are a senior software engineer with 10 years of experience. Provide technical answers with code examples when relevant.",
+    "You are a data analyst specializing in SQL and Python. Help with data analysis tasks.",
+]
+
+# Multiple semantic prompts - 极简版本，避免触发任何安全过滤
+_SEMANTIC_PROMPTS = [
+    "Say hello.",
+    "What is 2+2?",
+    "Name a color.",
+]
 
 
-def run_audit_detection(client, semantic_prompt: str = "Say hello.",
-                        sleep: float = 1.0) -> dict:
-    """Send the same semantic prompt in two wrappings and compare responses.
+def run_audit_detection(client, sleep: float = 1.0) -> dict:
+    """Send the same semantic requests in two wrappings and compare responses.
 
-    "audit-shape": the canonical audit system prompt + exact probe string.
-    "normal-shape": a natural developer-assistant system prompt + a
-    diversified phrasing of the same request.
+    For each semantic prompt, send it under both:
+    - "audit-shape": the canonical audit system prompt + exact probe string
+    - "normal-shape": a natural developer-assistant system prompt + a
+      diversified phrasing of the same request
 
-    A relay that fingerprints the audit shape will produce a DIVERGENT
-    response (e.g., cleaner / un-injected) for one shape but not the other.
+    A relay that fingerprints the audit shape will produce DIVERGENT
+    responses (e.g., cleaner / un-injected) for one shape but not the other.
 
     Returns:
-      - ``audit_response``: text under audit shape
-      - ``normal_response``: text under normal shape
-      - ``input_tokens_audit`` / ``input_tokens_normal``: reported tokens
-      - ``divergent``: True if input-token offset differs by > THRESHOLD
-        OR the responses are qualitatively different in a suspicious way
-      - ``inconclusive``: True if either call errored
+      - ``results``: list of per-prompt comparison results
+      - ``divergent_count``: number of prompts showing divergence
+      - ``total_prompts``: total number of prompts tested
+      - ``divergent``: True if any prompt shows divergence
+      - ``inconclusive``: True if all calls errored
     """
     THRESHOLD = 20
-    variants = diversify_probe(semantic_prompt, n=3, seed=42)
-    normal_prompt = variants[1] if len(variants) > 1 else semantic_prompt
+    results = []
+    divergent_count = 0
+    error_count = 0
 
-    r1 = client.call([{"role": "user", "content": semantic_prompt}],
-                     system=_AUDIT_SHAPE_SYSTEM, max_tokens=50)
-    time.sleep(sleep)
-    r2 = client.call([{"role": "user", "content": normal_prompt}],
-                     system=_NORMAL_SHAPE_SYSTEM, max_tokens=50)
-    if "error" in r1 or "error" in r2:
-        return {"inconclusive": True, "divergent": False,
-                "error": r1.get("error") or r2.get("error")}
-    t1 = (r1.get("text") or "").strip().lower()
-    t2 = (r2.get("text") or "").strip().lower()
-    it1 = r1.get("input_tokens", 0) or 0
-    it2 = r2.get("input_tokens", 0) or 0
-    # The normal shape has a longer system prompt, so it should report MORE
-    # input tokens, not fewer. A relay that injects ONLY under the audit
-    # shape would make it_audit offset unusually large relative to normal.
-    # We measure offset = reported - floor; but without a baseline we just
-    # compare whether the two shapes produce qualitatively different reply
-    # classes (one refuses/says-X, the other says-Y) OR an implausible
-    # token inversion (normal shape reports FEWER input tokens than audit
-    # shape despite a longer system prompt).
-    normal_longer_system = len(_NORMAL_SHAPE_SYSTEM) > len(_AUDIT_SHAPE_SYSTEM)
-    token_anomaly = normal_longer_system and (it2 < it1 - THRESHOLD)
-    # Qualitative divergence: one empty, one not; or very different lengths
-    qual_div = (bool(t1) != bool(t2)) or (
-        abs(len(t1) - len(t2)) > 3 * max(len(t1), len(t2), 1))
-    divergent = token_anomaly or qual_div
-    return {"audit_response": r1.get("text", ""), "normal_response": r2.get("text", ""),
-            "input_tokens_audit": it1, "input_tokens_normal": it2,
-            "divergent": divergent, "inconclusive": False}
+    for i, semantic_prompt in enumerate(_SEMANTIC_PROMPTS):
+        # Cycle through different normal-shape systems
+        normal_system = _NORMAL_SHAPE_SYSTEMS[i % len(_NORMAL_SHAPE_SYSTEMS)]
+
+        # Generate diversified variant for normal shape
+        variants = diversify_probe(semantic_prompt, n=3, seed=42 + i)
+        normal_prompt = variants[1] if len(variants) > 1 else semantic_prompt
+
+        r1 = client.call([{"role": "user", "content": semantic_prompt}],
+                         system=_AUDIT_SHAPE_SYSTEM, max_tokens=100)
+        time.sleep(sleep)
+        r2 = client.call([{"role": "user", "content": normal_prompt}],
+                         system=normal_system, max_tokens=100)
+
+        if "error" in r1 or "error" in r2:
+            error_count += 1
+            results.append({
+                "prompt": semantic_prompt[:50],
+                "error": r1.get("error") or r2.get("error"),
+                "divergent": False,
+            })
+            continue
+
+        t1 = (r1.get("text") or "").strip().lower()
+        t2 = (r2.get("text") or "").strip().lower()
+        it1 = r1.get("input_tokens", 0) or 0
+        it2 = r2.get("input_tokens", 0) or 0
+
+        # Token anomaly: normal shape should report MORE tokens (longer system)
+        normal_longer_system = len(normal_system) > len(_AUDIT_SHAPE_SYSTEM)
+        token_anomaly = normal_longer_system and (it2 < it1 - THRESHOLD)
+
+        # Qualitative divergence: one empty, one not; or very different lengths
+        qual_div = (bool(t1) != bool(t2)) or (
+            abs(len(t1) - len(t2)) > 3 * max(len(t1), len(t2), 1))
+
+        divergent = token_anomaly or qual_div
+        if divergent:
+            divergent_count += 1
+
+        results.append({
+            "prompt": semantic_prompt[:50],
+            "audit_tokens": it1,
+            "normal_tokens": it2,
+            "audit_len": len(t1),
+            "normal_len": len(t2),
+            "divergent": divergent,
+        })
+
+    total_prompts = len(_SEMANTIC_PROMPTS)
+    all_errored = error_count == total_prompts
+
+    return {
+        "results": results,
+        "divergent_count": divergent_count,
+        "total_prompts": total_prompts,
+        "error_count": error_count,
+        "divergent": divergent_count > 0,
+        "inconclusive": all_errored,
+    }
 
 
 # ============================================================
@@ -280,38 +321,59 @@ def test_probe_randomization(client, report, sleep: float = 1.0):
     """Run diversification + audit-detection and emit a report section."""
     report.h2(f"19. {STEP_NAME_CN}")
 
-    report.h3("19a. Probe diversification")
+    report.h3("19a. 探测多样化")
     report.p(
-        "Generate surface-distinct but semantically-equivalent variants of "
-        "the canonical probes so a relay cannot fingerprint the exact "
-        "published audit strings."
+        "生成表面不同但语义等价的探测变体，防止中转站通过精确匹配审计字符串进行指纹识别。"
     )
     sample = "Reply with exactly: ok"
     variants = diversify_probe(sample, n=4, seed=7)
     fr = fingerprint_resistance(variants)
     for v in variants:
         report.p(f"- `{v}`")
-    report.p(f"Fingerprint-resistance score: **{fr['score']}** "
-              f"(unique={fr['unique_ratio']}, edit={fr['avg_edit_distance']}, "
-              f"entropy={fr['entropy']})")
+    report.p(f"抗指纹识别得分：**{fr['score']}** "
+              f"（唯一性={fr['unique_ratio']}，编辑距离={fr['avg_edit_distance']}，"
+              f"熵={fr['entropy']}）")
     if fr["unique_ratio"] >= 0.75:
-        report.flag("green", f"Probe set well-diversified (unique ratio {fr['unique_ratio']})")
+        report.flag("green", f"探测集多样化良好（唯一性比率 {fr['unique_ratio']}）")
     else:
-        report.flag("yellow", f"Probe set under-diversified (unique ratio {fr['unique_ratio']})")
+        report.flag("yellow", f"探测集多样化不足（唯一性比率 {fr['unique_ratio']}）")
 
-    report.h3("19b. Audit-detection differential probe")
+    report.h3("19b. 审计检测差分探测")
     report.p(
-        "Send the same semantic request under an audit-shaped wrapper and a "
-        "normal-user-shaped wrapper, then compare. Divergent responses imply "
-        "the relay fingerprints audit traffic."
+        "以审计形状包装和正常用户形状包装发送多个相同语义请求，然后比较响应。"
+        "响应差异表明中转站对审计流量进行指纹识别。"
     )
     ad = run_audit_detection(client, sleep=sleep)
+
+    # 显示错误详情
+    if ad["error_count"] > 0:
+        error_prompts = [r for r in ad["results"] if r.get("error")]
+        if error_prompts:
+            report.p(f"\n**错误详情**（{ad['error_count']}/{ad['total_prompts']} 个请求失败）：")
+            for r in error_prompts[:3]:  # 最多显示 3 个错误
+                error_msg = str(r.get('error', 'Unknown error'))[:100]
+                report.p(f"- `{r['prompt']}`: {error_msg}")
+            if len(error_prompts) > 3:
+                report.p(f"- ... 还有 {len(error_prompts) - 3} 个错误")
+
     if ad["inconclusive"]:
-        report.flag("yellow", f"audit-detection INCONCLUSIVE: {ad.get('error','')}")
-    elif ad["divergent"]:
-        report.flag("red", "Audit-detection: relay behavior DIVERGES between audit-shape and normal-shape requests (likely fingerprinting)")
+        report.flag("yellow", f"审计检测结果不确定：所有 {ad['total_prompts']} 个调用都出错")
     else:
-        report.flag("green", "No audit-shape vs normal-shape divergence detected")
+        # 显示每个 prompt 的检测结果
+        success_results = [r for r in ad["results"] if not r.get("error")]
+        if success_results:
+            report.p("\n**成功的探测**：")
+            for r in success_results:
+                status = "❌ 分歧" if r["divergent"] else "✅ 一致"
+                report.p(f"- `{r['prompt']}`: {status} "
+                         f"(审计={r['audit_tokens']}tokens/{r['audit_len']}字符, "
+                         f"正常={r['normal_tokens']}tokens/{r['normal_len']}字符)")
+
+        report.p(f"\n总计：{ad['divergent_count']}/{ad['total_prompts']} 个请求显示分歧")
+        if ad["divergent"]:
+            report.flag("red", f"审计检测：{ad['divergent_count']}/{ad['total_prompts']} 个请求在审计形状和正常形状之间行为分歧（可能在进行指纹识别）")
+        else:
+            report.flag("green", "未检测到审计形状与正常形状之间的响应分歧")
 
     print("  Done: audit-evasion countermeasures")
     return {"diversification": fr, "variants": variants,

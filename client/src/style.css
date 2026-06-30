@@ -577,8 +577,8 @@ a { color: inherit; text-decoration: none; }
 }
 .report-modal__panel {
   position: relative;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
   border-radius: 12px;
   width: min(90vw, 900px);
   max-height: 85vh;
@@ -591,14 +591,14 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #e0e0e0;
   flex-shrink: 0;
 }
 .report-modal__head h3 {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-strong);
+  color: #1a1a1a;
 }
 .report-modal__head h3::before { content: none; }
 .report-modal__actions {
@@ -614,29 +614,29 @@ a { color: inherit; text-decoration: none; }
   font-family: var(--mono);
   font-size: 0.75rem;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.04);
-  color: var(--muted);
+  border: 1px solid #d0d0d0;
+  background: #f5f5f5;
+  color: #666;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
   text-decoration: none;
 }
 .report-modal__btn:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: var(--text-2);
-  color: var(--text-2);
+  background: #e8e8e8;
+  border-color: #bbb;
+  color: #333;
 }
 .report-modal__btn--download {
-  color: var(--accent-3);
-  border-color: rgba(34,211,238,0.4);
-  background: rgba(34,211,238,0.08);
+  color: #0e7490;
+  border-color: rgba(14,116,144,0.4);
+  background: rgba(14,116,144,0.08);
 }
 .report-modal__btn--download:hover {
-  background: rgba(34,211,238,0.16);
-  border-color: rgba(34,211,238,0.6);
+  background: rgba(14,116,144,0.16);
+  border-color: rgba(14,116,144,0.6);
 }
 .report-modal__btn--translate {
-  color: var(--accent-2);
+  color: #7c3aed;
   border-color: rgba(168,85,247,0.4);
   background: rgba(168,85,247,0.08);
 }
@@ -668,13 +668,13 @@ a { color: inherit; text-decoration: none; }
   padding: 20px 24px;
   font-size: 0.85rem;
   line-height: 1.7;
-  color: var(--text-2);
+  color: #333;
 }
 .report-modal__body h1,
 .report-modal__body h2,
 .report-modal__body h3,
 .report-modal__body h4 {
-  color: var(--text-strong);
+  color: #1a1a1a;
   margin: 1.2em 0 0.5em;
 }
 .report-modal__body h1 { font-size: 1.15rem; }
@@ -685,17 +685,17 @@ a { color: inherit; text-decoration: none; }
 .report-modal__body ol { padding-left: 1.5em; }
 .report-modal__body li  { margin: 0.3em 0; }
 .report-modal__body code {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid var(--border);
+  background: #f0f0f0;
+  border: 1px solid #ddd;
   border-radius: 3px;
   padding: 1px 4px;
   font-family: var(--mono);
   font-size: 0.82em;
-  color: var(--accent-3);
+  color: #0e7490;
 }
 .report-modal__body pre {
-  background: rgba(0,0,0,0.25);
-  border: 1px solid var(--border);
+  background: #f8f8f8;
+  border: 1px solid #ddd;
   border-radius: 6px;
   padding: 12px 14px;
   overflow-x: auto;
@@ -717,25 +717,25 @@ a { color: inherit; text-decoration: none; }
 }
 .report-modal__body th,
 .report-modal__body td {
-  border: 1px solid var(--border);
+  border: 1px solid #ddd;
   padding: 6px 10px;
   text-align: left;
 }
 .report-modal__body th {
-  background: rgba(255,255,255,0.04);
+  background: #f0f0f0;
   font-weight: 600;
-  color: var(--text-strong);
+  color: #1a1a1a;
 }
 .report-modal__body blockquote {
-  border-left: 3px solid var(--border);
+  border-left: 3px solid #ddd;
   margin: 0.6em 0;
   padding: 4px 12px;
-  color: var(--muted);
+  color: #888;
   font-style: italic;
 }
 .report-modal__body hr {
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid #ddd;
   margin: 1em 0;
 }
 .report-modal__loading {
@@ -743,15 +743,15 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: center;
   padding: 48px 0;
-  color: var(--muted);
+  color: #888;
   font-size: 0.85rem;
   gap: 8px;
 }
 .report-modal__loading .spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent-3);
+  border: 2px solid #ddd;
+  border-top-color: #0e7490;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }

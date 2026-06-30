@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 # ============================================================
 # run_stdin() 把它改造成「读 stdin JSON → 用 EventReporter 把 report.h2/h3/p/flag 实时映射成 NDJSON AuditEvent → stdout 流式输出」，
 # 供 server/src/audit/runner.ts spawn 后逐行解析经 SSE 推前端。
-from event_reporter import EventReporter
+from event_reporter import EventReporter, _fix_table_blanklines
 import protocol
 from protocol import build_done, build_error, build_report, build_start, emit
 from step_registry import run_registered_steps
@@ -1100,7 +1100,13 @@ class Reporter:
         self.sections.append(f"{t}\n")
 
     def code(self, t, lang=""):
-        self.sections.append(f"```{lang}\n{t}\n```\n")
+        # 如果内容本身包含三反引号，用更长的围栏避免嵌套冲突。
+        text = str(t)
+        fence_len = 3
+        while "```" + ("`" * (fence_len - 3)) in text:
+            fence_len += 1
+        fence = "`" * fence_len
+        self.sections.append(f"{fence}{lang}\n{text}\n{fence}\n")
 
     def flag(self, level, msg):
         """\u8bb0\u5f55\u4e00\u6761\u98ce\u9669\u53d1\u73b0\u5e76\u8ffd\u52a0\u4e00\u884c\u5e26\u8272\u6807\u8bb0\u3002``level``\uff08``"red"``/``"yellow"``/``"green"``\uff09\u51b3\u5b9a
@@ -1125,7 +1131,8 @@ class Reporter:
             icon = {"red": "\U0001f534", "yellow": "\U0001f7e1", "green": "\U0001f7e2"}.get(level, "\u26aa")
             header += f"- {icon} {msg}\n"
         header += "\n---\n"
-        return header + "\n".join(self.sections)
+        body = _fix_table_blanklines("\n".join(self.sections))
+        return header + body
 
 
 # ============================================================
@@ -1948,7 +1955,7 @@ def emit_overall_rating(report, bindings, step_crashes):
     #   d2                                                 -> MEDIUM
     #   d1i or d2i or d3i or d4i or d4m or d5i or any_crashed or EXTm* -> MEDIUM
     #   else                                               -> LOW
-    report.p("## 14. Overall Rating\n")
+    report.p("## Overall Rating\n")
     any_step_crashed = bool(step_crashes)
     d1 = injection is not None and injection > 100
     d1i = injection is None

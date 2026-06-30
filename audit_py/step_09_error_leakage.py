@@ -355,96 +355,116 @@ def run(client, report, **kwargs) -> tuple[str, bool]:
     args = kwargs.get("args")
     report.h2(f"9. {STEP_NAME_CN}")
     report.p(
-        "Fire deterministic broken requests (malformed JSON, invalid model, "
-        "wrong content-type, missing fields, unknown endpoint) at the relay "
-        "and scan the error response body and headers for echoed credentials, "
-        "upstream URLs, environment variable names, filesystem paths, and "
-        "stack-trace markers. "
-        "Reference: Liu et al., *Your Agent Is Mine*, arXiv:2604.08407 "
-        "figure 3 (AC-2 credential abuse at 4.25% of free routers, 2x more "
-        "common than AC-1 code injection).\n"
+        "向中转站发送一系列确定性构造的错误请求（畸形 JSON、无效模型名、"
+        "错误 Content-Type、缺失字段、未知端点、强制上游错误、认证探测），"
+        "扫描错误响应体和响应头中是否泄露凭证、上游 URL、环境变量名、"
+        "文件系统路径和堆栈标记。"
+        "参考文献：Liu et al., *Your Agent Is Mine*, arXiv:2604.08407 "
+        "图 3（AC-2 凭证滥用：4.25% 的免费中转站存在此问题，"
+        "比 AC-1 代码注入高 2 倍）。\n"
     )
     if args.aggressive_error_probes:
-        report.p("_Aggressive probes enabled: includes 256 KB oversized-context request._\n")
+        report.p("_激进探测已启用：包含 256 KB 超大上下文请求。_\n")
 
     results, severity, inconclusive = run_error_leakage_test(
         client, args.key, client.base_url,
         aggressive=args.aggressive_error_probes,
     )
 
-    report.p("| Trigger | HTTP Status | Severity | Leaks |")
-    report.p("|---------|-------------|----------|-------|")
+    report.p("| 触发类型 | HTTP 状态码 | 严重程度 | 泄露类型 |")
+    report.p("|----------|-------------|----------|----------|")
     transport_error_diagnostics = []
     for r in results:
         name = r["trigger"]
         status_cell = str(r["status"]) if r["status"] else "—"
         if r["error"]:
             transport_error_diagnostics.append((name, r["error"]))
-            status_cell = f"ERR: {r['error'][:40]}"
+            status_cell = f"错误：{r['error'][:40]}"
         sev = r["severity"]
         if sev == "critical":
-            sev_cell = "\U0001f534 CRITICAL"
+            sev_cell = "\U0001f534 严重"
         elif sev == "high":
-            sev_cell = "\U0001f534 HIGH"
+            sev_cell = "\U0001f534 高危"
         elif sev == "medium":
-            sev_cell = "\U0001f7e1 MEDIUM"
+            sev_cell = "\U0001f7e1 中等"
         else:
-            sev_cell = "\U0001f7e2 none"
+            sev_cell = "\U0001f7e2 无"
         leak_kinds = sorted({h["kind"] for h in r["hits"]})
         leaks_cell = ", ".join(leak_kinds) if leak_kinds else "—"
-        report.p(f"| {name} | {status_cell} | {sev_cell} | {leaks_cell} |")
+        report.p(f"| {_trigger_name_cn(name)} | {status_cell} | {sev_cell} | {leaks_cell} |")
 
     if transport_error_diagnostics:
-        report.p("\n**Transport error diagnostics:**")
+        report.p("\n**传输层错误诊断：**")
         for name, error in transport_error_diagnostics:
-            report.p(f"- {name}: {format_diagnosis(_diagnosis_for_error(error))}")
+            report.p(f"- {_trigger_name_cn(name)}：{format_diagnosis(_diagnosis_for_error(error))}")
 
     any_hits = [r for r in results if r["hits"]]
     if any_hits:
         report.p("")
         for r in any_hits:
-            report.h3(f"Trigger detail: `{r['trigger']}` ({r['severity']})")
-            report.p(f"HTTP status: **{r['status']}**")
-            report.p("Body preview (redacted):")
-            report.code(r["body_preview"] or "(empty)")
-            report.p("Hits:")
+            report.h3(f"触发详情：`{r['trigger']}`（{_severity_cn(r['severity'])}）")
+            report.p(f"HTTP 状态码：**{r['status']}**")
+            report.p("响应体预览（已脱敏）：")
+            report.code(r["body_preview"] or "(空)")
+            report.p("检测到的泄露：")
             for h in r["hits"]:
                 report.p(
-                    f"- `{h['kind']}` at {h['where']} [{h['severity']}]: "
+                    f"- `{h['kind']}` @ {h['where']} [{_severity_cn(h['severity'])}]："
                     f"`{h['snippet'][:200].replace('`', '')}`"
                 )
 
     if severity == "critical":
         report.flag(
             "red",
-            "Error response leaks the full API key (AC-2 direct credential "
-            "echo). Do not use this relay.",
+            "错误响应泄露了完整 API Key（AC-2 直接凭证回显）。"
+            "请立即停止使用该中转站。",
         )
     elif severity == "high":
         report.flag(
             "red",
-            "Error response leaks partial credentials, upstream provider URL, "
-            "or environment variable names. The relay is exposing internal "
-            "plumbing that maps onto the attacker's credential collection surface.",
+            "错误响应泄露了部分凭证、上游提供商 URL 或环境变量名。"
+            "中转站正在暴露内部架构，攻击者可借此收集凭证。",
         )
     elif severity == "medium":
         report.flag(
             "yellow",
-            "Error response leaks filesystem paths or stack traces. "
-            "Information disclosure is present but not directly "
-            "credential-exposing.",
+            "错误响应泄露了文件系统路径或堆栈跟踪。"
+            "存在信息泄露但尚未直接暴露凭证。",
         )
     elif inconclusive:
         report.flag(
             "yellow",
-            "Error leakage test INCONCLUSIVE: every probe returned HTTP 200 "
-            "or failed with a transport error, so no error surface could be "
-            "inspected. A relay that silently swallows malformed JSON into a "
-            "success response is itself suspicious.",
+            "错误泄露测试结果不确定：所有探测均返回 HTTP 200 "
+            "或传输层错误，无法检查错误响应面。"
+            "一个将畸形 JSON 静默吞入成功响应的中转站本身就很可疑。",
         )
     else:
-        report.flag("green", "No credential echo or upstream leakage detected in error responses")
+        report.flag("green", "错误响应中未检测到凭证回显或上游信息泄露")
 
     state = severity if severity != "none" else ("inconclusive" if inconclusive else "clean")
     print(f"  Done: error response leakage ({state})")
     return severity, inconclusive
+
+
+# ============================================================
+# 中文映射辅助函数
+# ============================================================
+
+_TRIGGER_NAME_CN = {
+    "malformed_json": "畸形 JSON",
+    "invalid_model": "无效模型名",
+    "wrong_content_type": "错误 Content-Type",
+    "missing_messages": "缺失 messages 字段",
+    "unknown_endpoint": "未知端点",
+    "force_upstream_error": "强制上游错误",
+    "auth_probe": "认证探测",
+    "oversized_context": "超大上下文",
+}
+
+
+def _trigger_name_cn(name: str) -> str:
+    return _TRIGGER_NAME_CN.get(name, name)
+
+
+def _severity_cn(sev: str) -> str:
+    return {"critical": "严重", "high": "高危", "medium": "中等", "none": "无"}.get(sev, sev)
